@@ -8,7 +8,7 @@ import { Game } from "../shared/game.js";
 import { CONFIG } from "../shared/config.js";
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 export function createApp({
-  port = Number(process.env.PORT) || 3000,
+  port = Number(process.env.PORT) || 5000,
   host = process.env.HOST || "0.0.0.0",
 } = {}) {
   const types = {
