@@ -165,3 +165,34 @@ test("decoys, watches, breath-delayed zero-ammo arrest replicate to both players
     a.ws.close(); b.ws.close();
   } finally { await app.close(); }
 });
+
+test("free STILL, pose transition and movement release replicate authoritatively", async () => {
+  const app = createApp({port:0,host:"127.0.0.1"}), addr=await app.start();
+  try {
+    const a=client(`ws://127.0.0.1:${addr.port}/ws`),b=client(`ws://127.0.0.1:${addr.port}/ws`);
+    await Promise.all([a.open(),b.open()]);a.send({type:"host",role:"killer"});
+    const room=await a.wait("room");b.send({type:"join",code:room.code});await b.wait("start");
+    const game=app.rooms.get(room.code).game;
+    a.send({type:"action",action:"still"});
+    for(const c of [a,b]) {
+      const m=await c.wait("state",m=>m.state.players.killer.still);
+      assert.equal(m.state.players.killer.spotId,null);assert.equal(m.state.players.killer.z,-2);
+    }
+    a.send({type:"input",input:{forward:1}});
+    await b.wait("state",m=>!m.state.players.killer.still&&m.state.players.killer.z < -2);
+    game.input('killer',{});Object.assign(game.state.players.killer,{x:0,z:-3.5});
+    a.send({type:"input",input:{}});a.send({type:"action",action:"pose"});
+    for(const c of [a,b]) {
+      const m=await c.wait("state",m=>m.state.players.killer.spotId===0&&m.state.players.killer.poseMix>0&&m.state.players.killer.poseMix<1);
+      assert.ok(m.state.players.killer.y>0&&m.state.players.killer.y<.7);
+    }
+    await b.wait("state",m=>m.state.players.killer.spotId===0&&m.state.players.killer.poseMix===1);
+    const eventId=game.state.eventId;
+    a.send({type:"input",input:{strafe:1}});
+    for(const c of [a,b]) {
+      const m=await c.wait("state",m=>m.state.eventId>eventId&&!m.state.players.killer.still);
+      assert.equal(m.state.players.killer.spotId,null);assert.equal(m.state.players.killer.y,0);
+    }
+    a.ws.close();b.ws.close();
+  } finally {await app.close();}
+});

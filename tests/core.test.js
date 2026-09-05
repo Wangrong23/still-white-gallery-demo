@@ -25,15 +25,21 @@ test("preparation gate, movement, wall collision and 12 reachable spots", () => 
     assert.ok(reachable, s.name);
   }
 });
-test("STILL snaps all poses, freezes movement, maintains hit geometry, safely releases", () => {
+test("exhibit poses blend from reachable approaches, lock facing and safely release", () => {
   for (const spot of spots) {
     const g = new Game();
-    Object.assign(g.state.players.killer, { x: spot.x + 1, z: spot.z });
-    g.action("killer", "still");
+    let entry = null;
+    for (let a = 0; a < Math.PI * 2; a += .2) {
+      Object.assign(g.state.players.killer, { x: spot.x + Math.sin(a) * 1.5, z: spot.z + Math.cos(a) * 1.5 });
+      if (g.nearestSpot()?.id === spot.id) { entry = { ...g.state.players.killer }; break; }
+    }
+    assert.ok(entry, `reachable pose ${spot.id}`);
+    g.action("killer", "pose");
+    advance(g, C.poseDuration + .05);
     const k = g.state.players.killer;
     assert.equal(k.spotId, spot.id);
     assert.equal(k.pose, spot.pose);
-    g.input("killer", { forward: 1 });
+    g.input("killer", { yaw: 2.2 });
     advance(g, 1);
     assert.equal(k.x, spot.x);
     assert.equal(k.z, spot.z);
@@ -51,7 +57,7 @@ test("sun shadow projection grows and changes direction", () => {
 });
 test("breath has exhaustion, cooldown and recovery", () => {
   const g = new Game();
-  Object.assign(g.state.players.killer, { x: 1, z: -5 });
+  Object.assign(g.state.players.killer, { x: 0, z: -2 });
   g.action("killer", "still");
   g.input("killer", { breath: true });
   advance(g, C.breathDuration + .1);

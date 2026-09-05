@@ -1,6 +1,6 @@
 import * as T from "three";
 import { solids, spots, statues, props, rooms } from "../shared/world.js";
-import { bodyParts } from "../shared/body.js";
+import { bodyParts, playerBodyParts } from "../shared/body.js";
 import { sunAt } from "../shared/sun.js";
 
 const ink = new T.MeshToonMaterial({ color: 0x101010 });
@@ -114,6 +114,14 @@ export class Gallery {
       killer: this.makeActor(false),
     };
     Object.values(this.actors).forEach((a) => this.scene.add(a));
+    this.posePreview = this.makeActor(false);
+    const previewMaterial = new T.MeshBasicMaterial({ color: 0x317b76,
+      transparent: true, opacity: .24, depthWrite: false });
+    this.posePreview.traverse((o) => {
+      if (o.isMesh) { o.material = previewMaterial; o.castShadow = false; o.receiveShadow = false; }
+    });
+    this.posePreview.visible = false;
+    this.scene.add(this.posePreview);
     this.spotHints = new T.Group();
     this.scene.add(this.spotHints);
     this.markerGroup = new T.Group();
@@ -429,13 +437,7 @@ export class Gallery {
   poseActor(a, p, time) {
     a.position.set(p.x, p.y || 0, p.z);
     a.rotation.y = p.yaw;
-    const breath = p.still ? p.breathOffset || 0 : 0;
-    const parts = bodyParts(
-      p.pose,
-      p.moving ? Math.sin((p.step || 0) * 8) * 0.6 : 0,
-      breath,
-      a.userData.detective,
-    );
+    const parts = playerBodyParts({ ...p, role: a.userData.detective ? "detective" : "killer" });
     parts.forEach((part, i) => {
       const m = a.userData.parts[i];
       m.position.set(part.x, part.y, part.z);
@@ -514,7 +516,7 @@ export class Gallery {
     role,
     view,
     dt,
-    { menu = false, showSpots = false, aim = false } = {},
+    { menu = false, showSpots = false, aim = false, posePreview = null } = {},
   ) {
     this.updateDestroyed(state.destroyedStatues, dt);
     const night =
@@ -533,6 +535,10 @@ export class Gallery {
       a.visible = true;
     });
     const p = state.players[role];
+    this.posePreview.visible = !menu && role === "killer" && ["PREPARATION", "DAY"].includes(state.phase)
+      && !!posePreview && (!p.still || p.spotId === null);
+    if (this.posePreview.visible) this.poseActor(this.posePreview,
+      { ...posePreview, still: true, holding: true }, 0);
     const cp = Math.cos(view.pitch),
       dir = new T.Vector3(
         -Math.sin(view.yaw) * cp,
@@ -602,10 +608,11 @@ export class Gallery {
     );
     this.spotHints.visible =
       !menu &&
-      (showSpots || (role === "killer" && !p.still && state.phase !== "NIGHT"));
+      (showSpots || (role === "killer" && (!p.still || p.spotId === null)
+        && ["PREPARATION", "DAY"].includes(state.phase)));
     this.spotHints.children.forEach((c, i) => {
       const s = spots[Math.floor(i / 2)];
-      c.visible = showSpots || Math.hypot(s.x - p.x, s.z - p.z) < 2.7;
+      c.visible = showSpots || s.id === posePreview?.id;
       if (i % 2) c.lookAt(this.camera.position);
     });
     this.mark(state.marks, state.markData, state.elapsed);

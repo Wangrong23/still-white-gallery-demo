@@ -81,7 +81,7 @@ const watch = (g, id = 0) => {
 };
 test("motion watches detect a still killer leaving, alert once, expire and reset", () => {
   const g = day();
-  Object.assign(g.state.players.killer, { x: 1, z: -5 }); g.action("killer", "still");
+  Object.assign(g.state.players.killer, { x: 0, z: -3.5 }); g.action("killer", "pose"); advance(g, C.poseDuration + .1);
   watch(g); advance(g, .2);
   assert.equal(g.state.markData[0].triggeredAt, null);
   g.action("killer", "still"); g.tick(.05);

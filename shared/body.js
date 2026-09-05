@@ -92,3 +92,16 @@ export function bodyParts(
   }
   return parts;
 }
+
+export function playerBodyParts(p) {
+  const parts = bodyParts(p.pose, p.moving ? Math.sin((p.step || 0) * 8) * 0.6 : 0,
+    p.still ? p.breathOffset || 0 : 0, p.role === "detective");
+  if (!p.poseFrom || p.poseMix >= 1) return parts;
+  const from = bodyParts(p.poseFrom, 0, 0, p.role === "detective");
+  return parts.map((part, i) => {
+    const out = { ...part };
+    for (const key of ["x", "y", "z", "w", "h", "d", "rx", "rz"])
+      out[key] = (from[i][key] || 0) + ((part[key] || 0) - (from[i][key] || 0)) * p.poseMix;
+    return out;
+  });
+}

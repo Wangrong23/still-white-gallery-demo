@@ -284,9 +284,13 @@ document.addEventListener("keydown", (e) => {
   }
   keys.add(e.code);
   if (paused) return;
+  if (role === "killer" && state.players.killer.still
+    && [bindings.forward, bindings.backward, bindings.left, bindings.right].includes(e.code))
+    action("unstill");
   if (e.code === bindings.still) action("still");
+  if (e.code === bindings.pose && role === "killer") action("pose");
   if (e.code === bindings.mark) action("mark");
-  if (e.code === bindings.flashlight) action("flashlight");
+  if (e.code === bindings.flashlight && role === "detective") action("flashlight");
   if (mode === "local") {
     if (e.code === "Tab") {
       game.input(role, {});
@@ -316,8 +320,8 @@ document.addEventListener("keydown", (e) => {
       state = game.state;
       botEnabled = false;
       role = "killer";
-      Object.assign(state.players.killer, { x: 1, z: -5 });
-      game.action("killer", "still");
+      Object.assign(state.players.killer, { x: 0, z: -3.5 });
+      game.action("killer", "pose");
       Object.assign(state.players.detective, { x: 5, z: 3, yaw: Math.PI / 2 });
       view = { yaw: 0.38, pitch: -0.2 };
       debug = true;
@@ -416,10 +420,10 @@ function hud(now) {
       ? s.players.detective.inspectTarget === "killer"
         ? t("inspectionPressure")
         : p.still
-        ? t("leaveStill")
+        ? t("leaveStill") + (nearest && p.spotId === null ? ` · ${tf("enterPose", { pose: t(`pose_${nearest.pose}`) })}` : "")
         : nearest
-          ? t("enterStill")
-          : ""
+          ? `${t("enterStill")} · ${tf("enterPose", { pose: t(`pose_${nearest.pose}`) })}`
+          : t("enterStill")
       : night && role === "killer"
         ? t("attack")
         : "";
@@ -558,6 +562,8 @@ function frame(now) {
     menu: mode === "menu",
     showSpots: mode === "local" && showSpots,
     aim,
+    posePreview: role === "killer" && ["PREPARATION", "DAY"].includes(state.phase)
+      && (!state.players.killer.still || state.players.killer.spotId === null) ? game.nearestSpot() : null,
   });
   requestAnimationFrame(frame);
 }

@@ -87,8 +87,8 @@ export class RehearsalBot {
         this.patrol = (this.patrol + 5) % spots.length;
         this.target = spots[this.patrol];
       }
-      if (distance(p, this.target) < 1.65) {
-        g.action(role, "still");
+      if (distance(p, this.target) < 1.65 && g.nearestSpot()) {
+        g.action(role, "pose");
         this.path = [];
         this.stillSince = 0;
         return;

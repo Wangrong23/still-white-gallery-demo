@@ -1,6 +1,6 @@
 import { CONFIG as C, STATES as S } from "./config.js";
 import { solids, spots, exit, statues } from "./world.js";
-import { bodyParts } from "./body.js";
+import { playerBodyParts } from "./body.js";
 import { updateBreath } from "./breath.js";
 import {
   clamp,
@@ -21,6 +21,12 @@ const player = (role) => ({
   still: false,
   spotId: null,
   pose: "stand",
+  poseFrom: null,
+  poseMix: 1,
+  stillTransition: null,
+  stillExit: null,
+  stillForward: 0,
+  stillStrafe: 0,
   breath: C.breathDuration,
   holding: false,
   breathDelay: 0,
@@ -90,42 +96,74 @@ export class Game {
       breath: !!data.breath,
       inspect: !!data.inspect,
     };
+    const p = this.state.players[role], i = this.inputs[role];
+    if (role === "killer" && p.still) {
+      if ([S.PREPARATION, S.DAY].includes(this.state.phase) && (i.forward || i.strafe)
+        && (i.forward !== p.stillForward || i.strafe !== p.stillStrafe)) this.leaveStill();
+      p.stillForward = i.forward;
+      p.stillStrafe = i.strafe;
+    }
   }
   nearestSpot() {
     const p = this.state.players.killer;
     return spots
-      .filter((s) => distance(s, p) <= s.range)
+      .filter((s) => distance(s, p) <= s.range && this.canStandAt(p.x, p.z)
+        && this.posePathClear(p, s, s)
+        && distance(s, this.state.players.detective) >= 0.65)
       .sort((a, b) => distance(a, p) - distance(b, p))[0];
+  }
+  canStandAt(x, z) {
+    return this.canMove(x, z)
+      && !(this.state.phase === S.PREPARATION && z > 19.5)
+      && distance({ x, z }, this.state.players.detective) >= 0.51;
+  }
+  posePathClear(from, to, spot) {
+    const len = distance(from, to);
+    const d = { x: (to.x - from.x) / (len || 1), y: 0, z: (to.z - from.z) / (len || 1) };
+    const o = { x: from.x, y: 0, z: from.z };
+    for (const b of solids) {
+      if (b.type === "floor") continue;
+      const support = spot && ["bench", "plinth"].includes(b.type)
+        && Math.abs(b.y + b.h / 2 - spot.y) < .05
+        && Math.abs(b.x - spot.x) <= b.w / 2 && Math.abs(b.z - spot.z) <= b.d / 2;
+      if (support) continue;
+      if (rayBox(o, d, { ...b, y: 0, h: 100,
+        w: b.w + C.playerRadius * 2, d: b.d + C.playerRadius * 2 }) <= len) return false;
+    }
+    for (const [id, statue] of statues.entries()) {
+      if (this.state.destroyedStatues.includes(id)) continue;
+      const t = clamp((statue.x - from.x) * d.x + (statue.z - from.z) * d.z, 0, len);
+      if (distance(statue, { x: from.x + d.x * t, z: from.z + d.z * t }) < .55) return false;
+    }
+    return true;
   }
   leaveStill() {
     const p = this.state.players.killer;
     if (!p.still) return;
+    const spot = spots[p.spotId];
+    if (spot || !this.canStandAt(p.x, p.z)) {
+      const candidates = p.stillExit ? [p.stillExit] : [];
+      for (let r = .4; r <= 2.4; r += .2)
+        for (let i = 0; i < 16; i++)
+          candidates.push({ x: p.x + Math.sin(i * Math.PI / 8) * r,
+            z: p.z + Math.cos(i * Math.PI / 8) * r });
+      const target = candidates.find((c) => this.canStandAt(c.x, c.z) && this.posePathClear(p, c, spot));
+      if (!target) return false;
+      p.x = target.x;
+      p.z = target.z;
+    }
     p.still = false;
     p.pose = "stand";
+    p.poseFrom = null;
+    p.poseMix = 1;
+    p.stillTransition = null;
+    p.stillExit = null;
     if (p.holding) p.breathDelay = C.breathRecoveryDelay;
     p.holding = false;
     p.y = 0;
-    // Step off a pedestal without leaving the actor stuck inside its collider.
-    if (!this.canMove(p.x, p.z)) {
-      const spot = spots[p.spotId];
-      for (let r = 0.9; r <= 2; r += 0.3) {
-        let found = false;
-        for (let i = 0; i < 12; i++) {
-          const a = (i * Math.PI) / 6,
-            x = spot.x + Math.sin(a) * r,
-            z = spot.z + Math.cos(a) * r;
-          if (this.canMove(x, z)) {
-            p.x = x;
-            p.z = z;
-            found = true;
-            break;
-          }
-        }
-        if (found) break;
-      }
-    }
     p.spotId = null;
     this.event("unstill", { x: p.x, z: p.z });
+    return true;
   }
   action(role, action) {
     const s = this.state,
@@ -136,23 +174,29 @@ export class Game {
       p.pitch = this.inputs[role].pitch;
     }
     if (
-      action === "still" &&
+      ["still", "pose", "unstill"].includes(action) &&
       role === "killer" &&
       [S.PREPARATION, S.DAY].includes(s.phase)
     ) {
-      if (p.still) this.leaveStill();
-      else {
+      if (["still", "unstill"].includes(action) && p.still) this.leaveStill();
+      else if (action === "still" && this.canStandAt(p.x, p.z)) {
+        Object.assign(p, { still: true, spotId: null, pose: "stand", moving: false,
+          stillForward: this.inputs.killer?.forward || 0, stillStrafe: this.inputs.killer?.strafe || 0 });
+        this.event("still", { spotId: null });
+      } else if (action === "pose" && (!p.still || p.spotId === null)) {
         const spot = this.nearestSpot();
         if (spot) {
           Object.assign(p, {
-            x: spot.x,
-            y: spot.y,
-            z: spot.z,
-            yaw: spot.yaw,
+            stillExit: { x: p.x, z: p.z },
+            stillTransition: { from: { x: p.x, y: p.y, z: p.z, yaw: p.yaw }, to: spot, time: 0 },
+            poseFrom: p.pose,
+            poseMix: 0,
             still: true,
             spotId: spot.id,
             pose: spot.pose,
             moving: false,
+            stillForward: this.inputs.killer?.forward || 0,
+            stillStrafe: this.inputs.killer?.strafe || 0,
           });
           this.event("still", { spotId: spot.id });
         }
@@ -378,12 +422,7 @@ export class Game {
       ),
       dir = rotateY(d, -p.yaw);
     let closest = Infinity;
-    for (const part of bodyParts(
-      p.pose,
-      p.moving ? Math.sin((p.step || 0) * 8) * 0.6 : 0,
-      p.still ? p.breathOffset || 0 : 0,
-      p.role === "detective",
-    )) {
+    for (const part of playerBodyParts(p)) {
       const ro = inversePart(local, part),
         rd = inversePart(dir, { ...part, x: 0, y: 0, z: 0 });
       closest = Math.min(
@@ -435,6 +474,28 @@ export class Game {
     for (const role of ["detective", "killer"]) {
       const p = s.players[role],
         i = this.inputs[role] || {};
+      if (role === "killer" && p.still) {
+        const f = i.forward || 0, r = i.strafe || 0;
+        if ([S.PREPARATION, S.DAY].includes(s.phase) && (f || r)
+          && (f !== p.stillForward || r !== p.stillStrafe)) this.leaveStill();
+        p.stillForward = f;
+        p.stillStrafe = r;
+      }
+      if (p.stillTransition) {
+        const tr = p.stillTransition;
+        tr.time = Math.min(C.poseDuration, tr.time + dt);
+        const t = tr.time / C.poseDuration;
+        p.poseMix = t * t * (3 - 2 * t);
+        const next = {};
+        for (const key of ["x", "y", "z"]) next[key] = tr.from[key] + (tr.to[key] - tr.from[key]) * p.poseMix;
+        if (distance(next, s.players.detective) < .51) this.leaveStill();
+        else {
+          Object.assign(p, next);
+          const angle = Math.atan2(Math.sin(tr.to.yaw - tr.from.yaw), Math.cos(tr.to.yaw - tr.from.yaw));
+          p.yaw = tr.from.yaw + angle * p.poseMix;
+          if (t === 1) p.stillTransition = null;
+        }
+      }
       p.moving = false;
       if (!p.still) {
         p.yaw = i.yaw ?? p.yaw;
