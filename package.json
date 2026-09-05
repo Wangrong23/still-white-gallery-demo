@@ -11,6 +11,11 @@
     "check": "node scripts/check.js",
     "build": "node scripts/build.js"
   },
-  "engines": { "node": ">=22.0.0" },
-  "dependencies": { "three": "0.180.0", "ws": "8.21.3" }
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "dependencies": {
+    "three": "0.180.0",
+    "ws": "8.21.3"
+  }
 }
