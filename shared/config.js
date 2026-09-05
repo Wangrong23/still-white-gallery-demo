@@ -1,0 +1,15 @@
+export const CONFIG = Object.freeze({
+  preparationDuration: 15, dayDuration: 420, sunsetDuration: 2.4,
+  nightDuration: 45, detectiveAmmo: 4, wrongShotPenalty: 35,
+  breathDuration: 30, breathRecovery: 12, breathCooldown: 5,
+  detectiveSpeed: 2.65, killerSpeed: 2.55, killerSprint: 4.1,
+  detectiveNightSpeed: 3.45, killerNightSpeed: 4.15,
+  playerRadius: 0.28, interactRange: 1.7, attackRange: 1.65,
+  shotCooldown: 0.65, serverHz: 30, snapshotHz: 20,
+});
+export const BINDINGS = Object.freeze({
+  forward: 'KeyW', backward: 'KeyS', left: 'KeyA', right: 'KeyD',
+  sprint: 'ShiftLeft', still: 'KeyE', breath: 'Space', mark: 'KeyQ',
+  flashlight: 'KeyF', lookBack: 'KeyR',
+});
+export const STATES = Object.freeze({ PREPARATION:'PREPARATION', DAY:'DAY', SUNSET:'SUNSET', NIGHT:'NIGHT', GAME_OVER:'GAME_OVER' });

@@ -1,0 +1,15 @@
+export class Sound {
+ constructor(){this.ctx=null;this.muted=false;this.nextHeart=0;}
+ start(){if(!this.ctx){this.ctx=new AudioContext();this.master=this.ctx.createGain();this.master.gain.value=.3;this.master.connect(this.ctx.destination);const size=this.ctx.sampleRate*2,buffer=this.ctx.createBuffer(1,size,this.ctx.sampleRate),data=buffer.getChannelData(0);let n=0;for(let i=0;i<size;i++){n=(n+(Math.random()*2-1)*.015)/1.015;data[i]=n;}const source=this.ctx.createBufferSource();source.buffer=buffer;source.loop=true;const gain=this.ctx.createGain();gain.gain.value=.11;source.connect(gain).connect(this.master);source.start();}this.ctx.resume();}
+ tone(freq,duration,volume=.15,type='sine',pan=0,delay=0){if(!this.ctx||this.muted)return;const t=this.ctx.currentTime+delay,osc=this.ctx.createOscillator(),gain=this.ctx.createGain(),p=this.ctx.createStereoPanner();osc.type=type;osc.frequency.setValueAtTime(freq,t);osc.frequency.exponentialRampToValueAtTime(Math.max(20,freq*.65),t+duration);gain.gain.setValueAtTime(.001,t);gain.gain.exponentialRampToValueAtTime(Math.max(.001,volume),t+.006);gain.gain.exponentialRampToValueAtTime(.001,t+duration);p.pan.value=pan;osc.connect(gain).connect(p).connect(this.master);osc.start(t);osc.stop(t+duration+.02);}
+ noise(duration,volume,pan=0,frequency=900){if(!this.ctx||this.muted)return;const buffer=this.ctx.createBuffer(1,Math.ceil(this.ctx.sampleRate*duration),this.ctx.sampleRate);const data=buffer.getChannelData(0);for(let i=0;i<data.length;i++)data[i]=(Math.random()*2-1)*(1-i/data.length);const s=this.ctx.createBufferSource(),g=this.ctx.createGain(),f=this.ctx.createBiquadFilter(),p=this.ctx.createStereoPanner();s.buffer=buffer;g.gain.value=volume;f.type='lowpass';f.frequency.value=frequency;p.pan.value=pan;s.connect(f).connect(g).connect(p).connect(this.master);s.start();}
+ event(e,listener,role){const distance=e.x===undefined?0:Math.hypot(e.x-listener.x,e.z-listener.z);const vol=Math.max(0,1-distance/18);const pan=e.x===undefined?0:Math.max(-1,Math.min(1,((e.x-listener.x)*Math.cos(listener.yaw)-(e.z-listener.z)*Math.sin(listener.yaw))/10));
+  if(e.type==='step'&&vol>0){this.noise(.07,vol*(e.role==='detective'?.21:.15),pan,1200);this.tone(e.role==='detective'?85:125,.055,vol*.12,'sine',pan);}
+  if(e.type==='shot'){this.noise(.28,.9,pan,7000);this.tone(72,.3,.5);this.noise(.07,.25,-pan,2500);}
+  if(e.type==='gasp'&&vol>0)this.noise(.7,vol*.25,pan,1500);
+  if(e.type==='swipe')this.noise(.18,.3,0,3000);
+  if(e.type==='mark')this.tone(500,.07,.03);
+  if(e.type==='phase'&&e.phase==='SUNSET'){for(let i=0;i<3;i++)this.tone(420-i*65,1.2,.3,'sine',0,i*.45);setTimeout(()=>this.noise(.12,.3,0,4000),900);if('speechSynthesis' in window){const u=new SpeechSynthesisUtterance('The gallery is now closed. Please proceed to the exit.');u.lang='en-US';u.rate=.8;u.pitch=.65;u.volume=.35;window.speechSynthesis.speak(u);}}
+ }
+ update(tension,time,night){if(time<this.nextHeart)return;this.nextHeart=time+(night?.8:1.45-tension*.85);if(tension>.05||night){this.tone(53,.12,.1+tension*.23);this.tone(46,.16,.07+tension*.17,'sine',0,.18);}}
+}
