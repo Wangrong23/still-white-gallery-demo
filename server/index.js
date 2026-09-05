@@ -209,9 +209,8 @@ export function createApp({
     start: () =>
       new Promise((r) =>
         server.listen(port, host, () => {
-          console.log(
-            `STILL is listening at http://localhost:${server.address().port}`,
-          );
+          const { address, port: bound } = server.address();
+          console.log(`STILL is listening at http://${address}:${bound}`);
           r(server.address());
         }),
       ),
