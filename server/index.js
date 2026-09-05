@@ -9,7 +9,7 @@ import { CONFIG } from "../shared/config.js";
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 export function createApp({
   port = Number(process.env.PORT) || 5000,
-  host = process.env.HOST || "0.0.0.0",
+  host = process.env.HOST || "::",
 } = {}) {
   const types = {
     ".html": "text/html; charset=utf-8",
@@ -208,9 +208,10 @@ export function createApp({
     rooms,
     start: () =>
       new Promise((r) =>
-        server.listen(port, host, () => {
-          const { address, port: bound } = server.address();
-          console.log(`STILL is listening at http://${address}:${bound}`);
+        server.listen({ port, host, ipv6Only: false }, () => {
+          const { address, port: bound, family } = server.address();
+          const shown = family === "IPv6" ? `[${address}]` : address;
+          console.log(`STILL is listening at http://${shown}:${bound}`);
           r(server.address());
         }),
       ),

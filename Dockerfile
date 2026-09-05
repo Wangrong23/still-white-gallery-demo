@@ -8,6 +8,7 @@ COPY shared ./shared
 COPY server ./server
 ENV NODE_ENV=production
 ENV PORT=5000
+ENV HOST="::"
 EXPOSE 5000
 USER node
 CMD ["node", "server/index.js"]
