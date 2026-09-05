@@ -1,0 +1,10 @@
+services:
+  - type: web
+    name: still-white-gallery
+    runtime: node
+    buildCommand: npm ci --omit=dev
+    startCommand: npm start
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_VERSION
+        value: 22.18.0

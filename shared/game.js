@@ -18,6 +18,7 @@ export class Game {
   p.spotId=null;this.event('unstill',{x:p.x,z:p.z});
  }
  action(role,action){const s=this.state,p=s.players[role];if(!p||s.phase===S.GAME_OVER)return;
+  if(!p.still&&this.inputs[role]){p.yaw=this.inputs[role].yaw;p.pitch=this.inputs[role].pitch;}
   if(action==='still'&&role==='killer'&&[S.PREPARATION,S.DAY].includes(s.phase)){if(p.still)this.leaveStill();else{const spot=this.nearestSpot();if(spot){Object.assign(p,{x:spot.x,y:spot.y,z:spot.z,yaw:spot.yaw,still:true,spotId:spot.id,pose:spot.pose,moving:false});this.event('still',{spotId:spot.id});}}}
   if(action==='shoot'&&role==='detective'&&[S.DAY,S.NIGHT].includes(s.phase)&&s.ammo>0&&s.elapsed-this.lastShot>C.shotCooldown){
    this.lastShot=s.elapsed;s.ammo--;const o={x:p.x,y:1.65,z:p.z},d=direction(p.yaw,p.pitch),hit=this.hitPlayer('killer',o,d),wall=this.obstacleDistance(o,d);const detected=hit<wall&&hit<65;
@@ -30,7 +31,7 @@ export class Game {
  }
  debugAction(action){if(!this.debug)return;const s=this.state;if(action==='time'){s.dayTime=Math.min(C.dayDuration,s.dayTime+45);}if(action==='sunset'){s.dayTime=C.dayDuration;this.phase(S.SUNSET);}if(action==='night'){s.dayTime=C.dayDuration;this.phase(S.NIGHT);}if(action==='ammo')s.ammo=C.detectiveAmmo;if(action==='day'){this.phase(S.DAY);} }
  canMove(x,z){if(x< -23.45||x>23.45||z< -19.45||z>23.5)return false;if(z>19.4&&Math.abs(x)>2.5)return false;for(const b of solids){if(b.type==='floor')continue;if(Math.abs(x-b.x)<b.w/2+C.playerRadius&&Math.abs(z-b.z)<b.d/2+C.playerRadius)return false;}for(const p of statues){if(Math.hypot(x-p.x,z-p.z)<0.55)return false;}return true;}
- move(p,dx,dz){const steps=Math.max(1,Math.ceil(Math.hypot(dx,dz)/0.12));for(let i=0;i<steps;i++){if(this.canMove(p.x+dx/steps,p.z))p.x+=dx/steps;if(this.canMove(p.x,p.z+dz/steps))p.z+=dz/steps;}}
+ move(p,dx,dz){const steps=Math.max(1,Math.ceil(Math.hypot(dx,dz)/0.12));const other=this.state.players[p.role==='killer'?'detective':'killer'];const allowed=(x,z)=>this.canMove(x,z)&&!(this.state.phase===S.PREPARATION&&z>19.5)&&!(other.y<.4&&Math.hypot(x-other.x,z-other.z)<.51);for(let i=0;i<steps;i++){if(allowed(p.x+dx/steps,p.z))p.x+=dx/steps;if(allowed(p.x,p.z+dz/steps))p.z+=dz/steps;}}
  obstacleDistance(o,d){let t=Infinity;for(const b of solids)t=Math.min(t,rayBox(o,d,b));for(const p of statues)t=Math.min(t,this.bodyDistance(p,o,d));return t;}
  bodyDistance(p,o,d){const local=rotateY({x:o.x-p.x,y:o.y-(p.y||0),z:o.z-p.z},-p.yaw),dir=rotateY(d,-p.yaw);let closest=Infinity;
   for(const part of bodyParts(p.pose,p.moving?Math.sin((p.step||0)*8)*0.6:0,p.still&&!p.holding?Math.sin(this.state.elapsed*2.1)*0.009:0,p.role==='detective')){const ro=inversePart(local,part),rd=inversePart(dir,{...part,x:0,y:0,z:0});closest=Math.min(closest,rayBox(ro,rd,{x:0,y:0,z:0,w:part.w,h:part.h,d:part.d}));}return closest;
