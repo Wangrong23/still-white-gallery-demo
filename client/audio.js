@@ -1,3 +1,5 @@
+import { gaspAcoustics } from "./acoustics.js";
+
 export class Sound {
   constructor() {
     this.ctx = null;
@@ -101,7 +103,10 @@ export class Sound {
       this.tone(72, 0.3, 0.5);
       this.noise(0.07, 0.25, -pan, 2500);
     }
-    if (e.type === "gasp" && vol > 0) this.noise(0.7, vol * 0.25, pan, 1500);
+    if (e.type === "gasp") {
+      const { gain, frequency } = gaspAcoustics(e, listener);
+      if (gain > 0) this.noise(0.7, gain * 0.25, pan, frequency);
+    }
     if (e.type === "swipe") this.noise(0.18, 0.3, 0, 3000);
     if (e.type === "mark") this.tone(500, 0.07, 0.03);
     if (e.type === "mark-alert" && role === "detective") {

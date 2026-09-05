@@ -26,7 +26,7 @@ export class SnapshotBuffer {
         continue;
       }
       const out = { ...q };
-      for (const key of ["x", "y", "z", "pitch", "step"])
+      for (const key of ["x", "y", "z", "pitch", "step", "breathOffset"])
         out[key] = p[key] + (q[key] - p[key]) * alpha;
       const angle = Math.atan2(Math.sin(q.yaw - p.yaw), Math.cos(q.yaw - p.yaw));
       out.yaw = p.yaw + angle * alpha;

@@ -429,7 +429,7 @@ export class Gallery {
   poseActor(a, p, time) {
     a.position.set(p.x, p.y || 0, p.z);
     a.rotation.y = p.yaw;
-    const breath = p.still && !p.holding ? Math.sin(time * 2.1) * 0.009 : 0;
+    const breath = p.still ? p.breathOffset || 0 : 0;
     const parts = bodyParts(
       p.pose,
       p.moving ? Math.sin((p.step || 0) * 8) * 0.6 : 0,

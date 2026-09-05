@@ -1,6 +1,7 @@
 import { CONFIG as C, STATES as S } from "./config.js";
 import { solids, spots, exit, statues } from "./world.js";
 import { bodyParts } from "./body.js";
+import { updateBreath } from "./breath.js";
 import {
   clamp,
   distance,
@@ -22,6 +23,11 @@ const player = (role) => ({
   pose: "stand",
   breath: C.breathDuration,
   holding: false,
+  breathDelay: 0,
+  breathNeedsRelease: false,
+  breathPhase: 0,
+  breathRate: 0,
+  breathOffset: 0,
   cooldown: 0,
   moving: false,
   sprint: 0,
@@ -96,6 +102,7 @@ export class Game {
     if (!p.still) return;
     p.still = false;
     p.pose = "stand";
+    if (p.holding) p.breathDelay = C.breathRecoveryDelay;
     p.holding = false;
     p.y = 0;
     // Step off a pedestal without leaving the actor stuck inside its collider.
@@ -329,7 +336,11 @@ export class Game {
     if (target !== p.inspectTarget || !target) p.inspectProgress = 0;
     p.inspectTarget = target;
     if (!target) return;
-    p.inspectProgress += dt;
+    // A motionless decoy takes as long as a killer holding their breath, so
+    // inspection speed alone cannot identify a perfectly still figure.
+    const duration = target === "killer" && !this.state.players.killer.holding
+      ? C.inspectDuration : C.inspectConcealedDuration;
+    p.inspectProgress += dt * C.inspectDuration / duration;
     if (p.inspectProgress < C.inspectDuration) return;
     if (target === "killer") this.win("DETECTED");
     else {
@@ -370,7 +381,7 @@ export class Game {
     for (const part of bodyParts(
       p.pose,
       p.moving ? Math.sin((p.step || 0) * 8) * 0.6 : 0,
-      p.still && !p.holding ? Math.sin(this.state.elapsed * 2.1) * 0.009 : 0,
+      p.still ? p.breathOffset || 0 : 0,
       p.role === "detective",
     )) {
       const ro = inversePart(local, part),
@@ -473,20 +484,8 @@ export class Game {
         }
       }
       if (role === "killer") {
-        p.cooldown = Math.max(0, p.cooldown - dt);
-        p.holding = !!(p.still && i.breath && p.breath > 0 && p.cooldown === 0);
-        if (p.holding) {
-          p.breath = Math.max(0, p.breath - dt);
-          if (p.breath === 0) {
-            p.cooldown = C.breathCooldown;
-            p.holding = false;
-            this.event("gasp", { x: p.x, z: p.z });
-          }
-        } else if (p.cooldown === 0)
-          p.breath = Math.min(
-            C.breathDuration,
-            p.breath + (dt * C.breathDuration) / C.breathRecovery,
-          );
+        if (updateBreath(p, !!i.breath, dt, [S.PREPARATION, S.DAY].includes(s.phase)))
+          this.event("gasp", { x: p.x, y: p.y + (p.pose === "sit" ? 0.94 : ["curl", "crouch"].includes(p.pose) ? 1.02 : 1.63), z: p.z });
       }
     }
     this.inspect(dt);

@@ -1,3 +1,4 @@
+import { CONFIG as C } from "../shared/config.js";
 import { spots } from "../shared/world.js";
 import { distance } from "../shared/math.js";
 // Local rehearsal only. Grid navigation shares the real collision map.
@@ -73,7 +74,8 @@ export class RehearsalBot {
     if (role === "killer" && s.phase !== "NIGHT") {
       if (p.still) {
         this.stillSince += dt;
-        g.input(role, { breath: g.tension() > 0.2 });
+        g.input(role, { breath: !p.breathNeedsRelease && p.cooldown === 0
+          && (p.holding || p.breath >= C.breathRestart) && g.tension() > 0.2 });
         if (this.stillSince > 28 && g.tension() < 0.12) {
           g.action(role, "still");
           this.target = null;

@@ -1,5 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { CONFIG as C } from "../shared/config.js";
 import { Game } from "../shared/game.js";
 import { spots } from "../shared/world.js";
 import { sunAt } from "../shared/sun.js";
@@ -53,12 +54,12 @@ test("breath has exhaustion, cooldown and recovery", () => {
   Object.assign(g.state.players.killer, { x: 1, z: -5 });
   g.action("killer", "still");
   g.input("killer", { breath: true });
-  advance(g, 30.1);
+  advance(g, C.breathDuration + .1);
   assert.ok(g.state.players.killer.cooldown > 0);
   assert.equal(g.state.players.killer.holding, false);
   g.input("killer", { breath: false });
-  advance(g, 17);
-  assert.equal(g.state.players.killer.breath, 30);
+  advance(g, C.breathCooldown + C.breathRecovery + .1);
+  assert.equal(g.state.players.killer.breath, C.breathDuration);
 });
 test("wrong shots spend ammo, move sun, never end the game at zero ammo", () => {
   const g = new Game({ debug: true });

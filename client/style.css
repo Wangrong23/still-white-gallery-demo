@@ -581,3 +581,7 @@ kbd {
     display: none;
   }
 }
+
+.breath-status { display: block; margin-top: 8px; line-height: 1.6; letter-spacing: 0.04em; }
+.breath-bar.low { height: 5px; background: #b45a2230; }
+.breath-bar.low i { background: #b45a22; }

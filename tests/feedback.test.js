@@ -68,9 +68,9 @@ test("empty rays leave no impact and walls receive surface-bound impacts", () =>
 test("daylight inspection clears decoys without ammo or time penalty", () => {
   const g = day(), p = statues[3]; g.state.ammo = 0;
   Object.assign(g.state.players.detective, { x: p.x, z: p.z + 1.3 });
-  g.input("detective", { inspect: true }); advance(g, 1.3);
+  g.input("detective", { inspect: true }); advance(g, C.inspectConcealedDuration + .1);
   assert.deepEqual(g.state.destroyedStatues, [3]);
-  assert.equal(g.state.ammo, 0); assert.ok(g.state.dayTime < 2);
+  assert.equal(g.state.ammo, 0); assert.ok(g.state.dayTime < C.inspectConcealedDuration + .2);
   assert.equal(g.state.result, null);
 });
 

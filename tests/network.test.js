@@ -81,6 +81,7 @@ test("two-player rematch resets all authoritative state and serves assets safely
     room.game.state.destroyedStatues = [1, 3];
     room.game.state.marks = [0];
     room.game.state.markData = { 0: { expiresAt: 45, triggeredAt: null, inside: false } };
+    Object.assign(room.game.state.players.killer, { breath: 0, cooldown: 5, breathNeedsRelease: true, breathOffset: .007 });
     room.game.win("FOUND YOU");
     a.send({ type: "rematch" });
     await a.wait("waiting-rematch");
@@ -91,6 +92,9 @@ test("two-player rematch resets all authoritative state and serves assets safely
     assert.deepEqual(room.game.state.destroyedStatues, []);
     assert.deepEqual(room.game.state.marks, []);
     assert.deepEqual(room.game.state.markData, {});
+    assert.equal(room.game.state.players.killer.breath, 15);
+    assert.equal(room.game.state.players.killer.breathNeedsRelease, false);
+    assert.equal(room.game.state.players.killer.breathOffset, 0);
     assert.equal(room.game.state.phase, "PREPARATION");
     for (const path of [
       "/",
@@ -118,7 +122,7 @@ test("two-player rematch resets all authoritative state and serves assets safely
   }
 });
 
-test("decoy destruction, watches and zero-ammo arrest replicate to both players", async () => {
+test("decoys, watches, breath-delayed zero-ammo arrest replicate to both players", async () => {
   const app = createApp({ port: 0, host: "127.0.0.1" }), addr = await app.start();
   try {
     const a = client(`ws://127.0.0.1:${addr.port}/ws`), b = client(`ws://127.0.0.1:${addr.port}/ws`);
@@ -139,9 +143,20 @@ test("decoy destruction, watches and zero-ammo arrest replicate to both players"
     }
     game.state.ammo = 0;
     Object.assign(game.state.players.detective, { x: 0, z: 0 });
-    Object.assign(game.state.players.killer, { x: 0, z: -1.3 });
-    const hold = setInterval(() => a.send({ type: "input", input: { yaw: 0, inspect: true } }), 50);
+    Object.assign(game.state.players.killer, { x: 0, z: -1.3, still: true });
+    let breathHeld = true;
+    const hold = setInterval(() => {
+      b.send({ type: "input", input: { breath: breathHeld } });
+      a.send({ type: "input", input: { yaw: 0, inspect: true } });
+    }, 50);
     try {
+      for (const c of [a, b]) {
+        const m = await c.wait("state", m => m.state.players.detective.inspectProgress >= .43);
+        assert.equal(m.state.players.killer.holding, true);
+        assert.equal(m.state.result, null);
+        assert.ok(Number.isFinite(m.state.players.killer.breathOffset));
+      }
+      breathHeld = false;
       for (const c of [a, b]) {
         const m = await c.wait("state", m => m.state.result === "DETECTED");
         assert.equal(m.state.ammo, 0);

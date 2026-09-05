@@ -386,10 +386,18 @@ function hud(now) {
         : s.phase === "SUNSET"
           ? t("closing")
           : t("beforeSunset");
+  const lowBreath = role === "killer" && p.holding && p.breath <= C.breathWarning;
+  const breathLabel = p.cooldown > 0 ? tf("breathCooldown", { seconds: Math.ceil(p.cooldown) })
+    : p.holding ? t(lowBreath ? "breathLow" : "holding")
+    : p.breathDelay > 0 ? t("breathSettling")
+    : p.breath < C.breathDuration ? t("recovering") : t("breath");
+  const breathHint = p.breathNeedsRelease ? t("breathRelease")
+    : p.cooldown > 0 || p.breath < C.breathRestart ? t("breathMinimum")
+    : !p.still ? t("breathStillFirst") : t("breathReady");
   $("resource").innerHTML =
     role === "detective"
       ? `${t("bullets")}<div class="bullets">${Array.from({ length: 4 }, (_, i) => `<span class="${i >= s.ammo ? "spent" : ""}">●</span>`).join("")}</div>`
-      : `${t(p.holding ? "holding" : p.cooldown > 0 ? "recovering" : "breath")}<div class="breath-bar"><i style="width:${(p.breath / C.breathDuration) * 100}%"></i></div>`;
+      : `${breathLabel} · ${p.breath.toFixed(1)} / ${C.breathDuration}s<div class="breath-bar${lowBreath ? " low" : ""}"><i style="width:${(p.breath / C.breathDuration) * 100}%"></i></div><small class="breath-status">${p.holding ? t(lowBreath ? "breathReleaseSoon" : "breathHoldingHint") : breathHint}</small>`;
   let place = rooms[0];
   if (p.x < -9) place = p.z < 0 ? rooms[1] : rooms[2];
   if (p.x > 9) place = p.z < 0 ? rooms[3] : rooms[4];
@@ -405,7 +413,9 @@ function hud(now) {
         ? tf("inspecting", { percent: Math.min(100, Math.round(p.inspectProgress / C.inspectDuration * 100)) })
         : game.inspectionTarget() ? t("inspectHint") : s.ammo === 0 ? t("noAmmo") : ""
       : role === "killer" && !night
-      ? p.still
+      ? s.players.detective.inspectTarget === "killer"
+        ? t("inspectionPressure")
+        : p.still
         ? t("leaveStill")
         : nearest
           ? t("enterStill")
