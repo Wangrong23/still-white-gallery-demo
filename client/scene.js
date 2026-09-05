@@ -81,7 +81,7 @@ export class Gallery {
     this.camera.rotation.order = "YXZ";
     this.sun = new T.DirectionalLight(0xffffff, 3.2);
     this.sun.castShadow = true;
-    this.sun.shadow.mapSize.set(4096, 4096);
+    this.sun.shadow.mapSize.set(2048, 2048);
     Object.assign(this.sun.shadow.camera, {
       left: -36,
       right: 36,
@@ -103,7 +103,12 @@ export class Gallery {
     this.world = new T.Group();
     this.scene.add(this.world);
     this.blockers = [];
+    this.statueActors = [];
+    this.wrecks = [];
     this.buildWorld();
+    this.batchOutlines();
+    this.cameraRay = new T.Raycaster();
+    this.cameraDistance = 3.05;
     this.actors = {
       detective: this.makeActor(true),
       killer: this.makeActor(false),
@@ -206,6 +211,19 @@ export class Gallery {
       this.poseActor(a, { ...p, still: true, moving: false, holding: true }, 0);
       this.world.add(a);
       this.blockers.push(a);
+      this.statueActors.push(a);
+      const wreck = new T.Group();
+      wreck.position.set(p.x, p.y || 0, p.z);
+      wreck.visible = false;
+      for (let i = 0; i < 9; i++) {
+        const chunk = cube(0.15 + (i % 3) * 0.07, 0.12, 0.24, i % 3 ? white : gray, false);
+        const angle = i * 2.4;
+        chunk.position.set(Math.sin(angle) * (0.25 + i * 0.04), 0.08, Math.cos(angle) * (0.25 + i * 0.04));
+        chunk.rotation.set(i * 0.13, angle, i * 0.09);
+        wreck.add(chunk);
+      }
+      this.world.add(wreck);
+      this.wrecks.push(wreck);
     }
     for (const p of props) this.makeProp(p);
     for (const r of rooms) {
@@ -246,6 +264,53 @@ export class Gallery {
       l.position.set(spot.x, 0.021, spot.z + 1.12);
       this.world.add(l);
     }
+  }
+  batchOutlines() {
+    // Static ink strokes share draw calls; keep the movable gate separate.
+    this.world.updateMatrixWorld(true);
+    const groups = new Map(), lines = [];
+    this.world.traverse((o) => {
+      if (!o.isLineSegments || o.parent === this.gate) return;
+      if (!groups.has(o.material)) groups.set(o.material, []);
+      const values = groups.get(o.material), pos = o.geometry.attributes.position;
+      const v = new T.Vector3();
+      for (let i = 0; i < pos.count; i++) {
+        v.fromBufferAttribute(pos, i).applyMatrix4(o.matrixWorld);
+        values.push(v.x, v.y, v.z);
+      }
+      lines.push(o);
+    });
+    for (const o of lines) { o.removeFromParent(); o.geometry.dispose(); }
+    for (const [material, values] of groups) {
+      const geometry = new T.BufferGeometry();
+      geometry.setAttribute("position", new T.Float32BufferAttribute(values, 3));
+      this.world.add(new T.LineSegments(geometry, material));
+    }
+  }
+  updateDestroyed(ids, dt) {
+    this.statueActors.forEach((actor, id) => {
+      const wreck = this.wrecks[id], destroyed = ids.includes(id);
+      if (destroyed && !wreck.visible) wreck.userData.age = 0;
+      actor.visible = !destroyed;
+      wreck.visible = destroyed;
+      if (!destroyed) return;
+      wreck.userData.age = Math.min(1, (wreck.userData.age || 0) + dt * 2.5);
+      const t = wreck.userData.age;
+      wreck.children.forEach((chunk, i) => {
+        chunk.position.y = 0.08 + (1 - t) * (0.6 + i * 0.08) + Math.sin(t * Math.PI) * 0.3;
+      });
+    });
+  }
+  resetEffects() {
+    for (const e of this.effects) {
+      e.mesh.removeFromParent();
+      e.mesh.geometry.dispose();
+      e.mesh.material.dispose();
+    }
+    this.effects = [];
+    this.wrecks.forEach((w) => { w.visible = false; });
+    this.gun.rotation.x = 0;
+    this.cameraDistance = 3.05;
   }
   artFrame(x, y, z, side) {
     const g = new T.Group();
@@ -424,8 +489,8 @@ export class Gallery {
       this.spotHints.add(l);
     }
   }
-  mark(ids) {
-    const key = ids.join(",");
+  mark(ids, data, elapsed) {
+    const key = ids.map((id) => `${id}:${data[id]?.triggeredAt ?? "armed"}:${Math.ceil((data[id]?.expiresAt - elapsed) || 0)}`).join(",");
     if (this.marksKey === key) return;
     this.marksKey = key;
     while (this.markerGroup.children.length) {
@@ -435,9 +500,11 @@ export class Gallery {
       c.material?.map?.dispose();
       c.material?.dispose();
     }
-    ids.forEach((id, i) => {
+    ids.forEach((id) => {
       const s = spots[id];
-      const l = label(`[ ${i + 1} ]`, 0.45, 0.22);
+      const m = data[id];
+      const alert = m?.triggeredAt != null;
+      const l = label(alert ? `! ${id + 1} !` : `${id + 1} / ${Math.max(0, Math.ceil(m.expiresAt - elapsed))}s`, 1.2, 0.24, alert ? "#d85417" : "#191919");
       l.position.set(s.x, s.y + 2.2, s.z);
       this.markerGroup.add(l);
     });
@@ -449,6 +516,7 @@ export class Gallery {
     dt,
     { menu = false, showSpots = false, aim = false } = {},
   ) {
+    this.updateDestroyed(state.destroyedStatues, dt);
     const night =
       state.phase === "NIGHT" ||
       (state.phase === "GAME_OVER" && state.dayTime >= 420);
@@ -493,7 +561,7 @@ export class Gallery {
     } else if (role === "detective") {
       this.camera.position.set(
         p.x,
-        1.65 + (p.moving ? Math.sin(p.step * 15) * 0.018 : 0),
+        1.65,
         p.z,
       );
       this.camera.rotation.set(view.pitch, view.yaw, 0, "YXZ");
@@ -508,11 +576,16 @@ export class Gallery {
       );
       let distance = 3.05;
       const back = dir.clone().negate();
-      this.scene.updateMatrixWorld(true);
-      const ray = new T.Raycaster(target, back, 0.1, 3.1);
-      const hit = ray.intersectObjects(this.blockers, true)[0];
+      this.world.updateMatrixWorld();
+      this.cameraRay.set(target, back);
+      this.cameraRay.near = 0.1;
+      this.cameraRay.far = 3.1;
+      const hit = this.cameraRay.intersectObjects(this.blockers.filter((b) => b.visible), true)
+        .find((h) => h.object.isMesh);
       if (hit) distance = Math.max(0.18, hit.distance - 0.16);
-      this.camera.position.copy(target).addScaledVector(back, distance);
+      this.cameraDistance = distance < this.cameraDistance ? distance
+        : this.cameraDistance + (distance - this.cameraDistance) * (1 - Math.exp(-dt * 10));
+      this.camera.position.copy(target).addScaledVector(back, this.cameraDistance);
       this.camera.lookAt(target.clone().addScaledVector(dir, 8));
       this.gun.visible = false;
     }
@@ -535,7 +608,7 @@ export class Gallery {
       c.visible = showSpots || Math.hypot(s.x - p.x, s.z - p.z) < 2.7;
       if (i % 2) c.lookAt(this.camera.position);
     });
-    this.mark(state.marks);
+    this.mark(state.marks, state.markData, state.elapsed);
     this.markerGroup.visible = !menu && role === "detective";
     this.markerGroup.children.forEach((m) => m.lookAt(this.camera.position));
     for (let i = this.effects.length - 1; i >= 0; i--) {
@@ -550,15 +623,24 @@ export class Gallery {
     }
     this.renderer.render(this.scene, this.camera);
   }
-  shot(point) {
-    const m = new T.Mesh(
-      new T.SphereGeometry(0.045, 5, 4),
-      new T.MeshBasicMaterial({ color: 0x111111 }),
-    );
-    m.position.set(point.x, point.y, point.z);
-    this.scene.add(m);
-    this.effects.push({ mesh: m, life: 12 });
+  shot(point, surface) {
     this.gun.rotation.x = -0.14;
     setTimeout(() => (this.gun.rotation.x = 0), 120);
+    const solid = solids.find((b) => b.id === surface);
+    if (!point || !solid) return;
+    const normal = new T.Vector3();
+    const face = [["x", "w"], ["y", "h"], ["z", "d"]]
+      .sort(([a, sa], [b, sb]) => Math.abs(Math.abs(point[a] - solid[a]) - solid[sa] / 2)
+        - Math.abs(Math.abs(point[b] - solid[b]) - solid[sb] / 2))[0][0];
+    normal[face] = Math.sign(point[face] - solid[face]) || 1;
+    const m = new T.Mesh(
+      new T.CircleGeometry(0.045, 8),
+      new T.MeshBasicMaterial({ color: 0x111111, depthWrite: false }),
+    );
+    m.position.set(point.x, point.y, point.z);
+    m.position.addScaledVector(normal, 0.006);
+    m.quaternion.setFromUnitVectors(new T.Vector3(0, 0, 1), normal);
+    this.scene.add(m);
+    this.effects.push({ mesh: m, life: 12 });
   }
 }

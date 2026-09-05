@@ -104,6 +104,11 @@ export class Sound {
     if (e.type === "gasp" && vol > 0) this.noise(0.7, vol * 0.25, pan, 1500);
     if (e.type === "swipe") this.noise(0.18, 0.3, 0, 3000);
     if (e.type === "mark") this.tone(500, 0.07, 0.03);
+    if (e.type === "mark-alert" && role === "detective") {
+      this.tone(880, 0.13, 0.22);
+      this.tone(660, 0.2, 0.18, "sine", 0, 0.16);
+    }
+    if (e.type === "shatter") this.noise(0.4, vol * 0.5, pan, 4800);
     if (e.type === "phase" && e.phase === "SUNSET") {
       for (let i = 0; i < 3; i++)
         this.tone(420 - i * 65, 1.2, 0.3, "sine", 0, i * 0.45);

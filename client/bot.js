@@ -11,8 +11,15 @@ export class RehearsalBot {
     this.suspicion = 0;
     this.role = null;
     this.patrol = 0;
+    this.walkable = new Map();
+    this.collisionKey = "";
   }
   route(from, to) {
+    const collisionKey = this.game.state.destroyedStatues.join(",");
+    if (collisionKey !== this.collisionKey) {
+      this.walkable.clear();
+      this.collisionKey = collisionKey;
+    }
     const game = this.game,
       key = (x, z) => `${x},${z}`,
       start = { x: Math.round(from.x), z: Math.round(from.z) },
@@ -35,7 +42,9 @@ export class RehearsalBot {
         const x = v.x + dx,
           z = v.z + dz,
           k = key(x, z);
-        if (!parents.has(k) && game.canMove(x, z)) {
+        if (parents.has(k)) continue;
+        if (!this.walkable.has(k)) this.walkable.set(k, game.canMove(x, z));
+        if (this.walkable.get(k)) {
           parents.set(k, v);
           queue.push({ x, z });
         }
@@ -106,15 +115,23 @@ export class RehearsalBot {
         this.target = patrol[this.patrol++ % patrol.length];
         this.replan = 0;
       }
-      if (op.moving && distance(p, op) < 15 && g.lineOfSight(p, op)) {
+      if ((op.moving || (s.ammo === 0 && this.target === op)) && distance(p, op) < 15 && g.lineOfSight(p, op)) {
         this.suspicion += dt;
         const yaw = Math.atan2(-(op.x - p.x), -(op.z - p.z));
-        g.input(role, { yaw, pitch: 0 });
-        if (this.suspicion > 1.5) {
-          g.action(role, "shoot");
-          this.suspicion = 0;
+        if (s.ammo === 0) {
+          this.target = op;
+          if (distance(p, op) < 1.6) {
+            g.input(role, { yaw, pitch: Math.atan2((op.y || 0) + 1.3 - 1.65, distance(p, op)), inspect: true });
+            return;
+          }
+        } else {
+          g.input(role, { yaw, pitch: 0 });
+          if (this.suspicion > 1.5) {
+            g.action(role, "shoot");
+            this.suspicion = 0;
+          }
+          return;
         }
-        return;
       }
       this.suspicion = 0;
     }

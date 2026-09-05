@@ -6,6 +6,7 @@ import { sunAt } from "../shared/sun.js";
 import { Sound } from "./audio.js";
 import { RehearsalBot } from "./bot.js";
 import { Connection } from "./network.js";
+import { SnapshotBuffer } from "./interpolation.js";
 import { applyLanguage, language, t, tf, translateError } from "./i18n.js";
 applyLanguage();
 const $ = (id) => document.getElementById(id),
@@ -23,6 +24,7 @@ try {
   throw e;
 }
 const sound = new Sound();
+const snapshots = new SnapshotBuffer();
 let game = new Game({ debug: true }),
   bot = new RehearsalBot(game),
   state = game.state,
@@ -45,6 +47,7 @@ let game = new Game({ debug: true }),
   waiting = false,
   lastTime = performance.now(),
   dragLook = false;
+let hudClock = 0;
 let bindings = { ...BINDINGS };
 try {
   bindings = {
@@ -54,11 +57,14 @@ try {
 } catch {}
 const connection = new Connection(
   (s) => {
+    snapshots.push(s, performance.now());
     state = s;
     game.state = s;
   },
   (m) => {
     if (m.type === "start") {
+      snapshots.reset();
+      gallery.resetEffects();
       eventId = 0;
       lastPhase = "";
       sound.nextHeart = 0;
@@ -149,6 +155,7 @@ function lock() {
       ?.catch(() => toast(t("pointerFallback")));
 }
 function begin(nextMode, nextRole) {
+  gallery.resetEffects();
   mode = nextMode;
   role = nextRole;
   paused = false;
@@ -180,6 +187,7 @@ function pause(value) {
   } else lock();
 }
 function menu() {
+  gallery.resetEffects();
   connection.close();
   mode = "menu";
   started = false;
@@ -246,10 +254,15 @@ function input() {
     pitch: view.pitch,
     sprint: keys.has(bindings.sprint) || keys.has("ShiftRight"),
     breath: keys.has(bindings.breath),
+    inspect: role === "detective" && keys.has(bindings.still),
   };
 }
 function action(a) {
   if (paused || !started) return;
+  if (a === "shoot" && state.ammo === 0) {
+    toast(t(state.phase === "NIGHT" ? "noAmmoNight" : "noAmmo"));
+    return;
+  }
   if (mode === "local") {
     game.input(role, input());
     game.action(role, a);
@@ -387,7 +400,11 @@ function hud(now) {
       : t("killerControls");
   const nearest = role === "killer" ? game.nearestSpot() : null;
   $("interaction").textContent =
-    role === "killer" && !night
+    role === "detective" && s.phase === "DAY"
+      ? p.inspectProgress > 0
+        ? tf("inspecting", { percent: Math.min(100, Math.round(p.inspectProgress / C.inspectDuration * 100)) })
+        : game.inspectionTarget() ? t("inspectHint") : s.ammo === 0 ? t("noAmmo") : ""
+      : role === "killer" && !night
       ? p.still
         ? t("leaveStill")
         : nearest
@@ -502,22 +519,32 @@ function frame(now) {
         connection.send("input", {
           input: paused ? { yaw: backYaw(), pitch: view.pitch } : input(),
         });
-        networkClock = 0;
+        networkClock %= 1 / 30;
       }
     }
     for (const e of state.events) {
       if (e.id <= eventId) continue;
       eventId = e.id;
       sound.event(e, state.players[role], role);
-      if (e.type === "shot") gallery.shot(e.point);
+      if (e.type === "shot") gallery.shot(e.point, e.surface);
+      if (e.type === "mark" && role === "detective" && e.placed)
+        toast(t("markPlaced"));
+      if (e.type === "mark-alert" && role === "detective")
+        toast(tf("markAlert", { spot: e.spotId + 1 }));
+      if (e.type === "inspected" && role === "detective") toast(t("inspected"));
       if (e.type === "penalty" && role === "detective")
         toast(t("emptyShot"));
       if (e.type === "gasp" && role === "killer")
         toast(t("gasp"));
     }
-    hud(now);
+    hudClock += dt;
+    if (hudClock >= 1 / 15 || state.phase !== lastPhase) {
+      hud(now);
+      hudClock = 0;
+    }
   }
-  gallery.update(state, role, { yaw: backYaw(), pitch: view.pitch }, dt, {
+  const rendered = mode === "online" ? snapshots.sample(state, now) : state;
+  gallery.update(rendered, role, { yaw: backYaw(), pitch: view.pitch }, dt, {
     menu: mode === "menu",
     showSpots: mode === "local" && showSpots,
     aim,

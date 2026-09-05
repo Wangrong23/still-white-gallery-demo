@@ -78,6 +78,9 @@ test("two-player rematch resets all authoritative state and serves assets safely
     await b.wait("start");
     const room = app.rooms.get(r.code);
     room.game.state.ammo = 0;
+    room.game.state.destroyedStatues = [1, 3];
+    room.game.state.marks = [0];
+    room.game.state.markData = { 0: { expiresAt: 45, triggeredAt: null, inside: false } };
     room.game.win("FOUND YOU");
     a.send({ type: "rematch" });
     await a.wait("waiting-rematch");
@@ -85,6 +88,9 @@ test("two-player rematch resets all authoritative state and serves assets safely
     b.send({ type: "rematch" });
     await a.wait("waiting-rematch", (m) => m.count === 2);
     assert.equal(room.game.state.ammo, 4);
+    assert.deepEqual(room.game.state.destroyedStatues, []);
+    assert.deepEqual(room.game.state.marks, []);
+    assert.deepEqual(room.game.state.markData, {});
     assert.equal(room.game.state.phase, "PREPARATION");
     for (const path of [
       "/",
@@ -110,4 +116,37 @@ test("two-player rematch resets all authoritative state and serves assets safely
   } finally {
     await app.close();
   }
+});
+
+test("decoy destruction, watches and zero-ammo arrest replicate to both players", async () => {
+  const app = createApp({ port: 0, host: "127.0.0.1" }), addr = await app.start();
+  try {
+    const a = client(`ws://127.0.0.1:${addr.port}/ws`), b = client(`ws://127.0.0.1:${addr.port}/ws`);
+    await Promise.all([a.open(), b.open()]); a.send({ type: "host", role: "detective" });
+    const r = await a.wait("room"); b.send({ type: "join", code: r.code }); await b.wait("start");
+    const game = app.rooms.get(r.code).game;
+    game.phase("DAY"); Object.assign(game.state.players.detective, { x: -19, z: 16 });
+    a.send({ type: "input", input: { yaw: 0 } }); a.send({ type: "action", action: "shoot" });
+    for (const c of [a, b]) {
+      const m = await c.wait("state", m => m.state.destroyedStatues.includes(3));
+      assert.equal(m.state.ammo, 3);
+    }
+    Object.assign(game.state.players.detective, { x: 0, z: -2 });
+    a.send({ type: "action", action: "mark" });
+    for (const c of [a, b]) {
+      const m = await c.wait("state", m => m.state.marks.includes(0));
+      assert.ok(m.state.markData[0].expiresAt > m.state.elapsed);
+    }
+    game.state.ammo = 0;
+    Object.assign(game.state.players.detective, { x: 0, z: 0 });
+    Object.assign(game.state.players.killer, { x: 0, z: -1.3 });
+    const hold = setInterval(() => a.send({ type: "input", input: { yaw: 0, inspect: true } }), 50);
+    try {
+      for (const c of [a, b]) {
+        const m = await c.wait("state", m => m.state.result === "DETECTED");
+        assert.equal(m.state.ammo, 0);
+      }
+    } finally { clearInterval(hold); }
+    a.ws.close(); b.ws.close();
+  } finally { await app.close(); }
 });

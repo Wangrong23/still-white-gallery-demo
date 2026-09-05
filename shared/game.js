@@ -27,6 +27,8 @@ const player = (role) => ({
   sprint: 0,
   flashlight: true,
   step: 0,
+  inspectTarget: null,
+  inspectProgress: 0,
 });
 export class Game {
   constructor({ debug = false } = {}) {
@@ -44,6 +46,8 @@ export class Game {
       result: null,
       players: { detective: player("detective"), killer: player("killer") },
       marks: [],
+      markData: {},
+      destroyedStatues: [],
       events: [],
       eventId: 0,
     };
@@ -78,6 +82,7 @@ export class Game {
       pitch: clamp(Number(data.pitch) || 0, -1.3, 1.3),
       sprint: !!data.sprint,
       breath: !!data.breath,
+      inspect: !!data.inspect,
     };
   }
   nearestSpot() {
@@ -158,17 +163,23 @@ export class Game {
       const o = { x: p.x, y: 1.65, z: p.z },
         d = direction(p.yaw, p.pitch),
         hit = this.hitPlayer("killer", o, d),
-        wall = this.obstacleDistance(o, d);
+        obstacle = this.obstacleHit(o, d),
+        wall = obstacle.distance;
       const detected = hit < wall && hit < 65;
+      const travel = Math.min(hit, wall);
+      const impact = Number.isFinite(travel) && travel < 65;
+      if (!detected && impact && obstacle.statueId != null)
+        this.breakStatue(obstacle.statueId);
       this.event("shot", {
         x: p.x,
         z: p.z,
         hit: detected,
-        point: {
-          x: o.x + d.x * Math.min(hit, wall, 50),
-          y: o.y + d.y * Math.min(hit, wall, 50),
-          z: o.z + d.z * Math.min(hit, wall, 50),
-        },
+        surface: !detected && impact ? obstacle.solidId ?? null : null,
+        point: impact ? {
+          x: o.x + d.x * travel,
+          y: o.y + d.y * travel,
+          z: o.z + d.z * travel,
+        } : null,
       });
       if (detected) this.win("DETECTED");
       else if (s.phase === S.DAY) {
@@ -206,19 +217,29 @@ export class Game {
           h: 2.4,
           d: 1.4,
         });
-        if (t < best && t < 22 && t < this.obstacleDistance(o, d) + 1) {
+        if (t < best && t < 22 && t < this.obstacleDistance(o, d) + 0.001) {
           best = t;
           chosen = spot;
         }
       }
       if (chosen) {
         const i = s.marks.indexOf(chosen.id);
-        if (i >= 0) s.marks.splice(i, 1);
+        if (i >= 0) {
+          s.marks.splice(i, 1);
+          delete s.markData[chosen.id];
+        }
         else {
           s.marks.push(chosen.id);
-          if (s.marks.length > 3) s.marks.shift();
+          s.markData[chosen.id] = {
+            expiresAt: s.elapsed + C.markDuration,
+            triggeredAt: null,
+            inside: distance(chosen, s.players.killer) < C.markRadius,
+            lastX: s.players.killer.x,
+            lastZ: s.players.killer.z,
+          };
+          if (s.marks.length > 3) delete s.markData[s.marks.shift()];
         }
-        this.event("mark");
+        this.event("mark", { placed: i < 0, spotId: chosen.id });
       }
     }
   }
@@ -252,7 +273,8 @@ export class Game {
       )
         return false;
     }
-    for (const p of statues) {
+    for (const [id, p] of statues.entries()) {
+      if (this.state.destroyedStatues.includes(id)) continue;
       if (Math.hypot(x - p.x, z - p.z) < 0.55) return false;
     }
     return true;
@@ -271,10 +293,72 @@ export class Game {
     }
   }
   obstacleDistance(o, d) {
-    let t = Infinity;
-    for (const b of solids) t = Math.min(t, rayBox(o, d, b));
-    for (const p of statues) t = Math.min(t, this.bodyDistance(p, o, d));
-    return t;
+    return this.obstacleHit(o, d).distance;
+  }
+  obstacleHit(o, d) {
+    let hit = { distance: Infinity };
+    for (const b of solids) {
+      const t = rayBox(o, d, b);
+      if (t < hit.distance) hit = { distance: t, solidId: b.id };
+    }
+    statues.forEach((p, statueId) => {
+      if (this.state.destroyedStatues.includes(statueId)) return;
+      const t = this.bodyDistance(p, o, d);
+      if (t < hit.distance) hit = { distance: t, statueId };
+    });
+    return hit;
+  }
+  breakStatue(id) {
+    if (this.state.destroyedStatues.includes(id)) return;
+    this.state.destroyedStatues.push(id);
+    this.event("shatter", { statueId: id, x: statues[id].x, z: statues[id].z });
+  }
+  inspectionTarget() {
+    if (this.state.phase !== S.DAY) return null;
+    const p = this.state.players.detective;
+    const o = { x: p.x, y: 1.65, z: p.z }, d = direction(p.yaw, p.pitch);
+    const obstacle = this.obstacleHit(o, d), killer = this.hitPlayer("killer", o, d);
+    if (killer < obstacle.distance && killer <= C.interactRange) return "killer";
+    if (obstacle.statueId != null && obstacle.distance <= C.interactRange)
+      return `statue:${obstacle.statueId}`;
+    return null;
+  }
+  inspect(dt) {
+    const p = this.state.players.detective, i = this.inputs.detective || {};
+    const target = i.inspect && !i.forward && !i.strafe ? this.inspectionTarget() : null;
+    if (target !== p.inspectTarget || !target) p.inspectProgress = 0;
+    p.inspectTarget = target;
+    if (!target) return;
+    p.inspectProgress += dt;
+    if (p.inspectProgress < C.inspectDuration) return;
+    if (target === "killer") this.win("DETECTED");
+    else {
+      this.breakStatue(Number(target.split(":")[1]));
+      this.event("inspected");
+    }
+    p.inspectTarget = null;
+    p.inspectProgress = 0;
+  }
+  updateMarks() {
+    const s = this.state, k = s.players.killer;
+    for (const id of [...s.marks]) {
+      const m = s.markData[id];
+      if (s.phase !== S.DAY || s.elapsed >= m.expiresAt) {
+        s.marks.splice(s.marks.indexOf(id), 1);
+        delete s.markData[id];
+        continue;
+      }
+      const inside = distance(spots[id], k) < C.markRadius;
+      const moved = Math.hypot(k.x - m.lastX, k.z - m.lastZ) > 0.001;
+      if (m.triggeredAt === null && ((inside && (k.moving || moved)) || inside !== m.inside)) {
+        m.triggeredAt = s.elapsed;
+        m.expiresAt = s.elapsed + 5;
+        this.event("mark-alert", { spotId: id });
+      }
+      m.inside = inside;
+      m.lastX = k.x;
+      m.lastZ = k.z;
+    }
   }
   bodyDistance(p, o, d) {
     const local = rotateY(
@@ -405,5 +489,7 @@ export class Game {
           );
       }
     }
+    this.inspect(dt);
+    this.updateMarks();
   }
 }
