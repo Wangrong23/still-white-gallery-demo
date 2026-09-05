@@ -1,7 +1,8 @@
 export class Connection {
-  constructor(onState, onMessage) {
+  constructor(onState, onMessage, translate = (key, message) => message || key) {
     this.onState = onState;
     this.onMessage = onMessage;
+    this.translate = translate;
     this.ws = null;
     this.role = null;
     this.room = null;
@@ -15,7 +16,7 @@ export class Connection {
       this.ws = ws;
       const timer = setTimeout(() => {
         ws.close();
-        reject(new Error("连接超时，请确认服务器正在运行。"));
+        reject(new Error(this.translate("timeout")));
       }, 8000);
       ws.onopen = () => ws.send(JSON.stringify({ type: mode, role, code }));
       ws.onmessage = (e) => {
@@ -30,12 +31,12 @@ export class Connection {
         else this.onMessage(m);
         if (m.type === "error") {
           clearTimeout(timer);
-          reject(new Error(m.message));
+          reject(new Error(this.translate("server", m.message)));
         }
       };
       ws.onerror = () => {
         clearTimeout(timer);
-        reject(new Error("无法连接双人服务器。请刷新后重试。"));
+        reject(new Error(this.translate("connectFailed")));
       };
       ws.onclose = () => {
         clearTimeout(timer);

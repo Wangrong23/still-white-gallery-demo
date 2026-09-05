@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1" />
     <meta name="theme-color" content="#eeeeea" />
-    <title>STILL / 别动 — The White Gallery</title>
+    <title>别动：白色展馆</title>
     <link
       rel="icon"
       href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 80 80'%3E%3Crect width='80' height='80' fill='white'/%3E%3Ctext x='18' y='60' font-family='serif' font-size='64'%3ES%3C/text%3E%3C/svg%3E"
@@ -26,34 +26,41 @@
     <div id="blackout"></div>
     <main id="menu">
       <div class="edition">
-        AN ASYMMETRIC GAME FOR TWO <span>VOL. 01 / 白厅</span>
+        <span id="edition-copy">双人非对称游戏</span>
+        <span>
+          <span id="volume-copy">第一卷 · 白厅</span>
+          <select id="language" aria-label="语言">
+            <option value="zh">中文</option>
+            <option value="en">English</option>
+          </select>
+        </span>
       </div>
       <div class="title">
-        <p class="eyebrow">THE WHITE GALLERY</p>
-        <h1>STILL<span class="period">.</span></h1>
+        <p class="eyebrow">白色展馆</p>
+        <h1>别动</h1>
         <div class="title-bottom">
-          <span class="chinese">别 动</span
-          ><span>One hunts.<br />One becomes the room.</span>
+          <span class="chinese">别动</span
+          ><span>一人追猎。<br />一人融入展厅。</span>
         </div>
       </div>
       <section class="play-menu" aria-label="开始游戏">
         <p class="intro">日落之前，找出画面里多出来的那个人。</p>
         <div class="role-picker">
           <button data-role="detective" class="selected">
-            01 &nbsp; DETECTIVE <small>警探</small></button
+            警探</button
           ><button data-role="killer">
-            02 &nbsp; KILLER <small>凶手</small>
+            凶手
           </button>
         </div>
         <button id="local" class="primary">
-          ENTER THE GALLERY <span>单人演练 ↗</span>
+          进入展馆 <span>单人演练 ↗</span>
         </button>
         <div class="network-row">
-          <button id="host">HOST <small>创建双人房间</small></button
-          ><button id="join">JOIN <small>加入房间</small></button>
+          <button id="host">创建房间 <small>双人游戏</small></button
+          ><button id="join">加入房间 <small>双人游戏</small></button>
         </div>
         <div id="join-form" hidden>
-          <label for="room-code">ROOM CODE / 房间码</label>
+          <label for="room-code">房间码</label>
           <div class="join-input">
             <input
               id="room-code"
@@ -65,11 +72,11 @@
         </div>
         <p id="network-status" role="status"></p>
         <p class="menu-note">
-          键盘 + 鼠标 · 耳机体验更佳 · 每局约 7 分钟<br />单人演练可切换角色；双人模式由两位玩家控制。
+          键盘和鼠标 · 建议佩戴耳机 · 每局约 7 分钟<br />单人演练可切换角色；双人模式由两位玩家控制。
         </p>
       </section>
       <footer>
-        <span>A STUDY IN LIGHT, SHADOW & SUSPICION</span
+        <span>光、影与猜疑研究</span
         ><span>17:53 ───────── 18:00</span
         ><button id="help-button">操作说明 ?</button>
       </footer>
@@ -77,13 +84,13 @@
     <div id="hud" hidden>
       <header>
         <div>
-          <span id="role-label">DETECTIVE</span>
-          <h2 id="objective">FIND HIM.</h2>
+          <span id="role-label">警探</span>
+          <h2 id="objective">找到他。</h2>
         </div>
         <div id="sun-clock">
           <span>☀</span>
           <div class="sun-track"><i id="sun-dot"></i></div>
-          <span>◐</span><small id="phase-label">BEFORE SUNSET</small>
+          <span>◐</span><small id="phase-label">日落之前</small>
         </div>
         <button id="pause-button" aria-label="暂停菜单">Ⅱ</button>
       </header>
@@ -104,10 +111,10 @@
     </div>
     <section id="pause" class="overlay" hidden>
       <div class="paper-dialog">
-        <p class="eyebrow">STILL / 别动</p>
-        <h2>Take a breath.</h2>
+        <p class="eyebrow">别动</p>
+        <h2>休息一下。</h2>
         <p id="pause-copy">继续后，点击画面锁定鼠标。</p>
-        <button id="resume" class="primary">CONTINUE ↗</button
+        <button id="resume" class="primary">继续 ↗</button
         ><button id="return-menu">返回主菜单</button>
         <details>
           <summary>操作说明</summary>
@@ -120,14 +127,14 @@
         <p class="eyebrow" id="winner"></p>
         <h2 id="result-title"></h2>
         <p id="result-copy"></p>
-        <button id="replay" class="primary">ANOTHER ROUND ↗</button
+        <button id="replay" class="primary">再来一局 ↗</button
         ><button id="result-menu">返回主菜单</button>
       </div>
     </section>
     <dialog id="help">
       <button id="close-help" aria-label="关闭">×</button>
-      <p class="eyebrow">FIELD NOTES / 操作</p>
-      <h2>Don't move.</h2>
+      <p class="eyebrow">行动手册</p>
+      <h2>不要动。</h2>
       <div class="help-copy"></div>
     </dialog>
     <script type="module" src="/client/main.js"></script>

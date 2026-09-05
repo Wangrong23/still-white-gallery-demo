@@ -6,14 +6,19 @@ import { sunAt } from "../shared/sun.js";
 import { Sound } from "./audio.js";
 import { RehearsalBot } from "./bot.js";
 import { Connection } from "./network.js";
+import { applyLanguage, language, t, tf, translateError } from "./i18n.js";
+applyLanguage();
 const $ = (id) => document.getElementById(id),
   canvas = $("game");
+$("language").onchange = (event) => {
+  localStorage.setItem("still.language", event.target.value);
+  location.reload();
+};
 let gallery;
 try {
   gallery = new Gallery(canvas);
 } catch (e) {
-  $("network-status").textContent =
-    "无法初始化 WebGL 2。请使用支持硬件加速的桌面 Chrome / Edge。";
+  $("network-status").textContent = t("webglError");
   console.error(e);
   throw e;
 }
@@ -61,34 +66,31 @@ const connection = new Connection(
       view = { yaw: 0, pitch: 0 };
       $("results").hidden = true;
       $("replay").disabled = false;
-      $("replay").textContent = "ANOTHER ROUND ↗";
+      $("replay").textContent = t("replay");
       if (!started) begin("online", connection.role || role);
       else {
         paused = false;
         $("pause").hidden = true;
-        toast("新一局开始 · 15 秒准备");
+        toast(t("roundStarted"));
       }
     }
     if (m.type === "peer-left") {
       pause(true);
-      $("pause-copy").textContent =
-        "另一位玩家已离开。本局已停止，请返回主菜单重新创建房间。";
+      $("pause-copy").textContent = t("peerLeft");
       $("resume").disabled = true;
     }
     if (m.type === "disconnected" && mode === "online") {
       pause(true);
-      $("pause-copy").textContent =
-        "与服务器的连接已断开，请返回主菜单重新连接。";
+      $("pause-copy").textContent = t("disconnected");
       $("resume").disabled = true;
     }
     if (m.type === "waiting-rematch") {
-      toast(`再来一局：${m.count} / 2 位玩家已准备`);
+      toast(tf("rematchReady", { count: m.count }));
     }
     if (m.type === "error") toast(m.message);
   },
+  (key, message) => (key === "server" ? translateError(message) : t(key)),
 );
-const help = `<p><strong>共同操作</strong><br><kbd>W A S D</kbd> 移动 · 鼠标观察 · <kbd>Esc</kbd> 释放鼠标 / 菜单。</p><p><strong>DETECTIVE / 警探</strong><br>左键射击 · 右键举枪 · <kbd>Q</kbd> 标记 / 取消可疑藏点（最多 3 个）<br>按住 <kbd>R</kbd> 快速回头 · <kbd>F</kbd> 夜间手电。</p><p><strong>KILLER / 凶手</strong><br><kbd>Shift</kbd> 短跑 · <kbd>E</kbd> 进入 / 解除 STILL<br>按住 <kbd>Space</kbd> 屏息 · 夜间左键袭击。</p><p>静止不会消除你的影子。观察太阳，趁警探转身换位。误射会让日落提前 35 秒。日落后警探逃向南侧入口；凶手有 45 秒追猎。超时仍存活，警探胜利。</p><p><strong>单人演练调试</strong><br><kbd>Tab</kbd> 切换角色 · <kbd>F2</kbd> 调试信息 · <kbd>F3</kbd> 推进 45 秒<br><kbd>F4</kbd> 日落 · <kbd>F6</kbd> 夜晚 · <kbd>F7</kbd> 补弹<br><kbd>F8</kbd> 所有藏点 · <kbd>F9</kbd> 开关陪练。</p>`;
-document.querySelectorAll(".help-copy").forEach((el) => (el.innerHTML = help));
 document.querySelectorAll("[data-role]").forEach(
   (b) =>
     (b.onclick = () => {
@@ -112,7 +114,7 @@ $("join").onclick = () => {
   $("room-code").focus();
 };
 async function connect(mode) {
-  $("network-status").textContent = "CONNECTING…";
+  $("network-status").textContent = t("connecting");
   $("host").disabled = true;
   $("connect").disabled = true;
   try {
@@ -124,8 +126,10 @@ async function connect(mode) {
     );
     role = m.role;
     waiting = true;
-    $("network-status").textContent =
-      `ROOM ${m.code} · ${m.role.toUpperCase()} · 等待另一位玩家加入…`;
+    $("network-status").textContent = tf("waiting", {
+      code: m.code,
+      role: t(m.role),
+    });
   } catch (e) {
     $("network-status").textContent = e.message;
     $("host").disabled = false;
@@ -142,7 +146,7 @@ function lock() {
   if (document.pointerLockElement !== canvas)
     canvas
       .requestPointerLock()
-      ?.catch(() => toast("可按住鼠标中键拖动观察，或用方向键转向"));
+      ?.catch(() => toast(t("pointerFallback")));
 }
 function begin(nextMode, nextRole) {
   mode = nextMode;
@@ -172,9 +176,7 @@ function pause(value) {
   if (value) {
     document.exitPointerLock();
     $("pause-copy").textContent =
-      mode === "online"
-        ? "联机对局会继续计时。继续后点击画面锁定鼠标。"
-        : "单人演练已暂停。";
+      mode === "online" ? t("onlinePause") : t("soloPause");
   } else lock();
 }
 function menu() {
@@ -208,7 +210,7 @@ $("replay").onclick = () => {
     begin("local", role);
   } else {
     connection.send("rematch");
-    $("replay").textContent = "WAITING FOR THE OTHER PLAYER…";
+    $("replay").textContent = t("waitingPlayer");
     $("replay").disabled = true;
   }
 };
@@ -279,7 +281,7 @@ document.addEventListener("keydown", (e) => {
       view = { yaw: state.players[role].yaw, pitch: 0 };
       keys.clear();
       lastPhase = "";
-      toast(`控制 ${role.toUpperCase()}`);
+      toast(tf("controlRole", { role: t(role) }));
     }
     if (e.code === "F2") debug = !debug;
     if (e.code === "F3") game.debugAction("time");
@@ -290,7 +292,7 @@ document.addEventListener("keydown", (e) => {
     if (e.code === "F9") {
       botEnabled = !botEnabled;
       game.input(role === "killer" ? "detective" : "killer", {});
-      toast(botEnabled ? "陪练已启用" : "陪练已停止");
+      toast(t(botEnabled ? "botOn" : "botOff"));
     }
     if (e.code === "F10") {
       game.reset();
@@ -306,7 +308,11 @@ document.addEventListener("keydown", (e) => {
       Object.assign(state.players.detective, { x: 5, z: 3, yaw: Math.PI / 2 });
       view = { yaw: 0.38, pitch: -0.2 };
       debug = true;
-      toast("SHADOW STUDY · F3 推进太阳 / Tab 警探视角");
+      toast(
+        language === "zh"
+          ? "影子研究 · F3 推进太阳 · Tab 切换警探视角"
+          : "SHADOW STUDY · F3 ADVANCE SUN · TAB DETECTIVE VIEW",
+      );
     }
   }
 });
@@ -345,48 +351,50 @@ function hud(now) {
     p = s.players[role],
     night = s.phase === "NIGHT" || (s.phase === "GAME_OVER" && s.dayTime >= C.dayDuration);
   $("role-label").textContent =
-    role.toUpperCase() + (mode === "local" ? " / REHEARSAL" : "");
+    t(role) + (mode === "local" ? ` · ${t("rehearsal")}` : "");
   $("objective").textContent =
     role === "detective"
       ? night
-        ? "RUN."
-        : "FIND HIM."
+        ? t("run")
+        : t("findHim")
       : night
-        ? "FIND HIM."
+        ? t("findHim")
         : p.still
-          ? "STILL."
-          : "DON’T MOVE.";
+          ? t("still")
+          : t("dontMove");
   $("sun-dot").style.left = `${Math.min(1, s.dayTime / C.dayDuration) * 100}%`;
   $("phase-label").textContent =
     s.phase === "PREPARATION"
-      ? `DOORS OPEN IN ${Math.ceil(C.preparationDuration - s.phaseTime)}`
+      ? tf("doorsOpen", {
+          seconds: Math.ceil(C.preparationDuration - s.phaseTime),
+        })
       : night
-        ? "AFTER SUNSET"
+        ? t("afterSunset")
         : s.phase === "SUNSET"
-          ? "THE GALLERY IS CLOSING"
-          : "BEFORE SUNSET";
+          ? t("closing")
+          : t("beforeSunset");
   $("resource").innerHTML =
     role === "detective"
-      ? `BULLETS<div class="bullets">${Array.from({ length: 4 }, (_, i) => `<span class="${i >= s.ammo ? "spent" : ""}">●</span>`).join("")}</div>`
-      : `${p.holding ? "HOLDING" : p.cooldown > 0 ? "RECOVERING" : "BREATH"}<div class="breath-bar"><i style="width:${(p.breath / C.breathDuration) * 100}%"></i></div>`;
+      ? `${t("bullets")}<div class="bullets">${Array.from({ length: 4 }, (_, i) => `<span class="${i >= s.ammo ? "spent" : ""}">●</span>`).join("")}</div>`
+      : `${t(p.holding ? "holding" : p.cooldown > 0 ? "recovering" : "breath")}<div class="breath-bar"><i style="width:${(p.breath / C.breathDuration) * 100}%"></i></div>`;
   let place = rooms[0];
   if (p.x < -9) place = p.z < 0 ? rooms[1] : rooms[2];
   if (p.x > 9) place = p.z < 0 ? rooms[3] : rooms[4];
   $("location").innerHTML = `${place.name}<span>${place.sub}</span>`;
   $("controls-hint").innerHTML =
     role === "detective"
-      ? "R — 回头 &nbsp; Q — 标记<br>右键举枪 · 左键射击"
-      : "E — STILL &nbsp; SPACE — 屏息<br>SHIFT — 短跑";
+      ? t("detectiveControls")
+      : t("killerControls");
   const nearest = role === "killer" ? game.nearestSpot() : null;
   $("interaction").textContent =
     role === "killer" && !night
       ? p.still
-        ? "E — LEAVE STILL"
+        ? t("leaveStill")
         : nearest
-          ? "E — STILL"
+          ? t("enterStill")
           : ""
       : night && role === "killer"
-        ? "LEFT CLICK — ATTACK"
+        ? t("attack")
         : "";
   $("crosshair").style.opacity = role === "detective" ? 1 : 0.2;
   document.body.classList.toggle(
@@ -402,29 +410,29 @@ function hud(now) {
     lastPhase = s.phase;
     if (s.phase === "PREPARATION")
       phaseCard(
-        role.toUpperCase(),
+        t(role),
         role === "detective"
-          ? "Find him before sunset. / 日落前，找出他。"
-          : "Don't move. / 先选一个藏点。",
-        "15 SECONDS TO COMPOSE THE SCENE",
+          ? t("detectivePrep")
+          : t("killerPrep"),
+        t("compose"),
       );
     if (s.phase === "DAY")
       phaseCard(
-        role === "detective" ? "FIND HIM." : "DON’T MOVE.",
+        role === "detective" ? t("findHim") : t("dontMove"),
         role === "detective"
-          ? "Four bullets. One stranger."
-          : "Your shadow will not wait.",
-        "17:53 / THE GALLERY IS OPEN",
+          ? t("fourBullets")
+          : t("shadowWait"),
+        t("galleryOpen"),
       );
     if (s.phase === "SUNSET")
-      phaseCard("CLOSING TIME.", "The gallery is now closed.", "18:00");
+      phaseCard(t("closingTime"), t("galleryClosed"), "18:00");
     if (s.phase === "NIGHT")
       phaseCard(
-        role === "detective" ? "RUN." : "YOUR TURN.",
+        role === "detective" ? t("run") : t("yourTurn"),
         role === "detective"
-          ? "Find the south exit. / 返回南侧入口逃生。"
-          : "45 seconds. Find him.",
-        "AFTER SUNSET",
+          ? t("findExit")
+          : t("huntTime"),
+        t("afterSunset"),
       );
     if (s.phase === "GAME_OVER") {
       document.exitPointerLock();
@@ -433,24 +441,22 @@ function hud(now) {
       const result = s.result;
       $("result-title").textContent =
         result === "FOUND YOU"
-          ? "FOUND YOU."
+          ? t("foundYou")
           : result === "ESCAPED"
-            ? "ESCAPED."
+            ? t("escaped")
             : result === "SURVIVED"
-              ? "SURVIVED."
-              : "DETECTED.";
+              ? t("survived")
+              : t("detected");
       $("winner").textContent =
-        result === "FOUND YOU"
-          ? "KILLER WINS / 凶手获胜"
-          : "DETECTIVE WINS / 警探获胜";
+        t(result === "FOUND YOU" ? "killerWins" : "detectiveWins");
       $("result-copy").textContent =
         result === "FOUND YOU"
-          ? "白昼的猎物，找到了你。"
+          ? t("resultFound")
           : result === "ESCAPED"
-            ? "你在黑暗里找到了出口。"
+            ? t("resultEscaped")
             : result === "SURVIVED"
-              ? "你熬过了 45 秒的追猎。"
-              : "画面里，多出来的那个人。";
+              ? t("resultSurvived")
+              : t("resultDetected");
     }
   }
   $("phase-card").style.opacity = now < phaseUntil ? 1 : 0;
@@ -505,9 +511,9 @@ function frame(now) {
       sound.event(e, state.players[role], role);
       if (e.type === "shot") gallery.shot(e.point);
       if (e.type === "penalty" && role === "detective")
-        toast("EMPTY SHOT. / 日落提前 35 秒");
+        toast(t("emptyShot"));
       if (e.type === "gasp" && role === "killer")
-        toast("Breathe. / 暂时无法屏息");
+        toast(t("gasp"));
     }
     hud(now);
   }
