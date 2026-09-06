@@ -477,11 +477,9 @@ function hud(now) {
       : role === "killer" && !night
       ? s.players.detective.inspectTarget === "killer"
         ? t("inspectionPressure")
-        : p.still
-        ? t("leaveStill") + (nearest && p.spotId === null ? ` · ${tf("enterPose", { pose: t(`pose_${nearest.pose}`) })}` : "")
-        : nearest
-          ? `${t("enterStill")} · ${tf("enterPose", { pose: t(`pose_${nearest.pose}`) })}`
-          : t("enterStill")
+        : nearest && (!p.still || p.spotId === null)
+          ? tf("enterPose", { pose: t(`pose_${nearest.pose}`) })
+          : ""
       : night && role === "killer"
         ? t("attack")
         : "";
