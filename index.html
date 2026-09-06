@@ -71,14 +71,15 @@
           </div>
         </div>
         <p id="network-status" role="status"></p>
+        <button id="network-cancel" hidden>离开房间</button>
         <p class="menu-note">
           键盘和鼠标 · 建议佩戴耳机 · 每局约 7 分钟<br />单人演练可切换角色；双人模式由两位玩家控制。
         </p>
       </section>
       <footer>
-        <span>光、影与猜疑研究</span
+        <span id="study-copy">请勿触碰展品。</span
         ><span>17:53 ───────── 18:00</span
-        ><button id="help-button">操作说明 ?</button>
+        ><button id="settings-button">设置</button><button id="help-button">操作说明 ?</button>
       </footer>
     </main>
     <div id="hud" hidden>
@@ -116,6 +117,7 @@
         <p id="pause-copy">继续后，点击画面锁定鼠标。</p>
         <button id="resume" class="primary">继续 ↗</button
         ><button id="return-menu">返回主菜单</button>
+        <button id="pause-settings">设置</button>
         <details>
           <summary>操作说明</summary>
           <div class="help-copy"></div>

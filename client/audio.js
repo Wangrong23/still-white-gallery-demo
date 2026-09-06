@@ -1,4 +1,4 @@
-import { gaspAcoustics } from "./acoustics.js";
+import { gaspAcoustics, spatialAcoustics } from "./acoustics.js";
 
 export class Sound {
   constructor() {
@@ -6,12 +6,43 @@ export class Sound {
     this.muted = false;
     this.nextHeart = 0;
     this.samples = new Map();
+    this.settings = { volume: 1, ambience: 1, voice: true };
+    this.closingTimer = null;
+    this.activeSources = new Set();
+  }
+  configure(settings) {
+    this.settings = settings;
+    this.muted = settings.volume === 0;
+    if (this.ctx) {
+      this.master.gain.setTargetAtTime(.3 * settings.volume, this.ctx.currentTime, .03);
+      this.ambience.gain.setTargetAtTime(.11 * settings.ambience, this.ctx.currentTime, .03);
+    }
+    // TTS is outside the Web Audio graph; cancel speech when its settings change.
+    this.cancelAnnouncement();
+  }
+  cancelAnnouncement() {
+    clearTimeout(this.closingTimer);
+    this.closingTimer = null;
+    if (typeof window !== "undefined" && "speechSynthesis" in window) window.speechSynthesis.cancel();
+  }
+  stop() {
+    this.cancelAnnouncement();
+    for (const source of this.activeSources) {
+      try { source.stop(); } catch { /* Already ended. */ }
+    }
+    this.activeSources.clear();
+    this.ctx?.suspend();
+    this.nextHeart = 0;
+  }
+  track(source) {
+    this.activeSources.add(source);
+    source.addEventListener("ended", () => this.activeSources.delete(source), { once: true });
   }
   start() {
     if (!this.ctx) {
       this.ctx = new AudioContext();
       this.master = this.ctx.createGain();
-      this.master.gain.value = 0.3;
+      this.master.gain.value = 0.3 * this.settings.volume;
       this.master.connect(this.ctx.destination);
       for (const name of ["heel", "revolver", "plaster", "bell"]) {
         fetch(`/client/assets/${name}.wav`)
@@ -32,23 +63,28 @@ export class Sound {
       source.buffer = buffer;
       source.loop = true;
       const gain = this.ctx.createGain();
-      gain.gain.value = 0.11;
+      this.ambience = gain;
+      gain.gain.value = 0.11 * this.settings.ambience;
       source.connect(gain).connect(this.master);
       source.start();
     }
     this.ctx.resume();
   }
-  sample(name, volume, pan = 0, rate = 1) {
+  sample(name, volume, pan = 0, rate = 1, frequency = 20000) {
     if (!this.ctx || this.muted) return false;
     const buffer = this.samples.get(name);
     if (!buffer) return false;
     const source = this.ctx.createBufferSource(), gain = this.ctx.createGain(), p = this.ctx.createStereoPanner();
+    const filter = this.ctx.createBiquadFilter();
+    filter.type = "lowpass";
+    filter.frequency.value = frequency;
     source.buffer = buffer;
     source.playbackRate.value = rate;
     gain.gain.value = volume;
     p.pan.value = pan;
-    source.connect(gain).connect(p).connect(this.master);
-    source.onended = () => { source.disconnect(); gain.disconnect(); p.disconnect(); };
+    source.connect(filter).connect(gain).connect(p).connect(this.master);
+    source.onended = () => { source.disconnect(); filter.disconnect(); gain.disconnect(); p.disconnect(); };
+    this.track(source);
     source.start();
     return true;
   }
@@ -70,7 +106,9 @@ export class Sound {
     p.pan.value = pan;
     osc.connect(gain).connect(p).connect(this.master);
     osc.start(t);
+    this.track(osc);
     osc.stop(t + duration + 0.02);
+    osc.onended = () => { osc.disconnect(); gain.disconnect(); p.disconnect(); };
   }
   noise(duration, volume, pan = 0, frequency = 900) {
     if (!this.ctx || this.muted) return;
@@ -93,8 +131,11 @@ export class Sound {
     p.pan.value = pan;
     s.connect(f).connect(g).connect(p).connect(this.master);
     s.start();
+    this.track(s);
+    s.onended = () => { s.disconnect(); f.disconnect(); g.disconnect(); p.disconnect(); };
   }
   event(e, listener, role) {
+    if (this.muted) return;
     const distance =
       e.x === undefined ? 0 : Math.hypot(e.x - listener.x, e.z - listener.z);
     const vol = Math.max(0, 1 - distance / 18);
@@ -111,14 +152,17 @@ export class Sound {
             ),
           );
     if (e.type === "step" && vol > 0) {
-      if (this.sample("heel", vol * (e.role === "detective" ? .28 : .19), pan, .94 + Math.random() * .12)) return;
-      this.noise(0.07, vol * (e.role === "detective" ? 0.21 : 0.15), pan, 1200);
+      const step = spatialAcoustics(e, listener);
+      if (!step.gain) return;
+      if (this.sample("heel", step.gain * (e.role === "detective" ? .28 : .19), step.pan,
+        .94 + Math.random() * .12, step.frequency)) return;
+      this.noise(0.07, step.gain * (e.role === "detective" ? 0.21 : 0.15), step.pan, step.frequency);
       this.tone(
         e.role === "detective" ? 85 : 125,
         0.055,
-        vol * 0.12,
+        step.gain * 0.12,
         "sine",
-        pan,
+        step.pan,
       );
     }
     if (e.type === "shot") {
@@ -128,8 +172,8 @@ export class Sound {
       this.noise(0.07, 0.25, -pan, 2500);
     }
     if (e.type === "gasp") {
-      const { gain, frequency } = gaspAcoustics(e, listener);
-      if (gain > 0) this.noise(0.7, gain * 0.25, pan, frequency);
+      const gasp = gaspAcoustics(e, listener);
+      if (gasp.gain > 0) this.noise(0.7, gasp.gain * 0.25, gasp.pan, gasp.frequency);
     }
     if (e.type === "swipe") this.noise(0.18, 0.3, 0, 3000);
     if (e.type === "mark") this.tone(500, 0.07, 0.03);
@@ -141,8 +185,9 @@ export class Sound {
     if (e.type === "phase" && e.phase === "SUNSET") {
       if (!this.sample("bell", .4)) for (let i = 0; i < 3; i++)
         this.tone(420 - i * 65, 1.2, 0.3, "sine", 0, i * 0.45);
-      setTimeout(() => this.noise(0.12, 0.3, 0, 4000), 900);
-      if (!this.muted && "speechSynthesis" in window) {
+      this.cancelAnnouncement();
+      this.closingTimer = setTimeout(() => { this.closingTimer = null; this.noise(0.12, 0.3, 0, 4000); }, 900);
+      if (this.settings.voice && "speechSynthesis" in window) {
         const chinese = localStorage.getItem("still.language") !== "en";
         const u = new SpeechSynthesisUtterance(
           chinese ? "展馆即将闭馆。请前往出口。" : "The gallery is now closed. Please proceed to the exit.",
@@ -150,7 +195,7 @@ export class Sound {
         u.lang = chinese ? "zh-CN" : "en-US";
         u.rate = 0.8;
         u.pitch = 0.65;
-        u.volume = 0.35;
+        u.volume = 0.35 * this.settings.volume;
         window.speechSynthesis.speak(u);
       }
     }

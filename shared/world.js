@@ -165,6 +165,14 @@ export const props = [
   { type: "abstract", x: 3, z: -15 },
   { type: "abstract", x: -20, z: 9 },
 ];
+// Footprints for movement and pose paths, separate from detailed visual meshes.
+// Air between coat hooks and sculpture rings stays open to sight and bullets.
+export const propFootprints = props.map((p, id) => ({
+  id: `prop-footprint-${id}`, x: p.x, z: p.z, y: 0, h: 2, type: "prop",
+  w: p.type === "abstract" ? 1.4 : p.type === "plant" ? .65 : .12,
+  d: p.type === "abstract" ? 1.4 : p.type === "plant" ? .65 : .12,
+}));
+export const movementSolids = [...solids, ...propFootprints];
 export const exit = { x: 0, z: 22.5, radius: 1.7 };
 export const rooms = [
   { name: "THE WHITE GALLERY", sub: "白厅 · CENTRAL HALL", x: 0, z: 2 },

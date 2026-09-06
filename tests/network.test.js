@@ -2,6 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { WebSocket } from "ws";
 import { createApp } from "../server/index.js";
+import { Connection } from "../client/network.js";
 function client(url) {
   const ws = new WebSocket(url),
     messages = [];
@@ -55,9 +56,10 @@ test("host/join, server authority, movement replication, room isolation, disconn
       (m) => m.state.players.killer.z < -2,
     );
     assert.equal(snapshot.state.phase, "PREPARATION");
-    b.ws.close();
+    b.send({ type: "leave" });
     await a.wait("peer-left");
     assert.equal(app.rooms.has(ar.code), false);
+    b.ws.close();
     a.ws.close();
     c.ws.close();
   } finally {
@@ -195,4 +197,84 @@ test("free STILL, pose transition and movement release replicate authoritatively
     }
     a.ws.close();b.ws.close();
   } finally {await app.close();}
+});
+
+test("disconnected seats pause the round, reject impersonation, restore state and expire", async () => {
+  const app = createApp({ port: 0, host: '127.0.0.1' });
+  const { port } = await app.start(), url = `ws://127.0.0.1:${port}/ws`;
+  try {
+    const a = client(url), b = client(url);
+    await Promise.all([a.open(), b.open()]);
+    a.send({ type: 'host', role: 'detective' });
+    const roomInfo = await a.wait('room');
+    b.send({ type: 'join', code: roomInfo.code });
+    const seat = await b.wait('room'); await a.wait('start');
+    const room = app.rooms.get(roomInfo.code);
+    room.game.state.ammo = 1;
+    room.game.state.destroyedStatues = [0];
+    b.ws.terminate();
+    await a.wait('peer-reconnecting');
+    const elapsed = room.game.state.elapsed;
+    await new Promise(r => setTimeout(r, 80));
+    assert.equal(room.game.state.elapsed, elapsed);
+    assert.equal(room.active, false);
+    const impostor = client(url); await impostor.open();
+    impostor.send({ type: 'resume', code: roomInfo.code, role: 'killer', token: roomInfo.token });
+    await impostor.wait('error');
+    impostor.send({ type: 'join', code: roomInfo.code });
+    await impostor.wait('error', m => !m.code);
+    const restored = client(url); await restored.open();
+    restored.send({ type: 'resume', code: roomInfo.code, role: 'killer', token: seat.token });
+    const recovered = await restored.wait('room');
+    assert.equal(recovered.resumed, true);
+    assert.equal(recovered.state.ammo, 1);
+    assert.deepEqual(recovered.state.destroyedStatues, [0]);
+    assert.equal(recovered.state.elapsed, elapsed);
+    await a.wait('resumed');
+    assert.equal(room.active, true);
+    restored.ws.terminate();
+    await new Promise(r => setTimeout(r, 40));
+    room.resumeUntil = Date.now() - 1;
+    await a.wait('peer-left', m => m.reason === 'expired');
+    assert.equal(app.rooms.has(roomInfo.code), false);
+    a.ws.close(); impostor.ws.close();
+  } finally { await app.close(); }
+});
+
+test("browser connection automatically resumes and can restore its saved tab session", async () => {
+  const app = createApp({ port: 0, host: '127.0.0.1' });
+  const { port } = await app.start(), url = `ws://127.0.0.1:${port}/ws`;
+  const memory = new Map();
+  const storage = { getItem: k => memory.get(k), setItem: (k,v) => memory.set(k,v), removeItem: k => memory.delete(k) };
+  let state, restored = 0, conn;
+  const waitFor = async predicate => {
+    for (let i=0; i<100 && !predicate(); i++) await new Promise(r=>setTimeout(r,20));
+    assert.ok(predicate());
+  };
+  const make = () => new Connection(s => { state = s; }, m => { if(m.type === 'restored') restored++; },
+    undefined, { Socket: WebSocket, url, storage });
+  try {
+    conn = make();
+    const own = await conn.connect('host', 'killer');
+    const peer = client(url); await peer.open(); peer.send({ type:'join', code:own.code }); await peer.wait('start');
+    app.rooms.get(own.code).game.state.ammo = 2;
+    conn.ws.terminate();
+    await waitFor(() => restored === 1);
+    assert.equal(state.ammo, 2);
+    assert.equal(conn.role, 'killer');
+    assert.equal(conn.reconnecting, false);
+    // Simulate page disposal without the explicit leave action.
+    const oldSocket = conn.ws;
+    conn.ws = null;
+    oldSocket.close();
+    conn = make();
+    assert.equal(conn.resumeSaved(), true);
+    await waitFor(() => restored === 2);
+    assert.equal(state.ammo, 2);
+    conn.close();
+    await peer.wait('peer-left');
+    assert.equal(memory.size, 0);
+    assert.equal(app.rooms.has(own.code), false);
+    peer.ws.close();
+  } finally { conn?.close(); await app.close(); }
 });

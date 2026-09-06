@@ -7,6 +7,7 @@ import { Sound } from "./audio.js";
 import { RehearsalBot } from "./bot.js";
 import { Connection } from "./network.js";
 import { SnapshotBuffer } from "./interpolation.js";
+import { DEFAULT_SETTINGS, mountSettings } from "./settings.js";
 import { applyLanguage, language, t, tf, translateError } from "./i18n.js";
 applyLanguage();
 const $ = (id) => document.getElementById(id),
@@ -24,6 +25,12 @@ try {
   throw e;
 }
 const sound = new Sound();
+let settings = { ...DEFAULT_SETTINGS };
+const settingsDialog = mountSettings({ language, storage: localStorage, onChange: (next) => {
+  settings = next;
+  sound.configure(next);
+  gallery.configure(next);
+} });
 const snapshots = new SnapshotBuffer();
 let game = new Game({ debug: true }),
   bot = new RehearsalBot(game),
@@ -48,6 +55,7 @@ let game = new Game({ debug: true }),
   lastTime = performance.now(),
   dragLook = false;
 let hudClock = 0;
+let connectionBlocked = false;
 let bindings = { ...BINDINGS };
 try {
   bindings = {
@@ -63,6 +71,7 @@ const connection = new Connection(
   },
   (m) => {
     if (m.type === "start") {
+      sound.cancelAnnouncement();
       snapshots.reset();
       gallery.resetEffects();
       eventId = 0;
@@ -80,16 +89,27 @@ const connection = new Connection(
         toast(t("roundStarted"));
       }
     }
-    if (m.type === "peer-left") {
-      pause(true);
-      $("pause-copy").textContent = t("peerLeft");
-      $("resume").disabled = true;
+    if (m.type === "reconnecting") connectionStatus("reconnecting", true);
+    if (m.type === "peer-reconnecting") connectionStatus("peerReconnecting", true);
+    if (m.type === "peer-left") connectionStatus(m.reason === "expired" ? "reconnectExpired" : "peerLeft", true, true);
+    if (m.type === "disconnected") connectionStatus("reconnectExpired", true, true);
+    if (m.type === "restored") {
+      snapshots.reset();
+      if (m.started) {
+        if (!started) begin("online", connection.role, false);
+        view = { yaw: state.players[role].yaw, pitch: state.players[role].pitch };
+        eventId = state.eventId; // Do not replay old shots, footsteps or broadcasts.
+        lastPhase = state.phase === "GAME_OVER" ? "" : state.phase;
+        phaseUntil = 0;
+        connectionStatus(m.active ? "reconnected" : "peerReconnecting", !m.active);
+      } else {
+        connectionBlocked = false;
+        waiting = true;
+        $("network-status").textContent = tf("waiting", { code: connection.room, role: t(connection.role) });
+        $("network-cancel").hidden = false;
+      }
     }
-    if (m.type === "disconnected" && mode === "online") {
-      pause(true);
-      $("pause-copy").textContent = t("disconnected");
-      $("resume").disabled = true;
-    }
+    if (m.type === "resumed") connectionStatus("reconnected", false);
     if (m.type === "waiting-rematch") {
       toast(tf("rematchReady", { count: m.count }));
     }
@@ -97,6 +117,28 @@ const connection = new Connection(
   },
   (key, message) => (key === "server" ? translateError(message) : t(key)),
 );
+function connectionStatus(key, blocked, terminal = false) {
+  connectionBlocked = blocked;
+  keys.clear();
+  sound.cancelAnnouncement();
+  if (started) {
+    pause(true);
+    $("pause-copy").textContent = t(key);
+    $("resume").disabled = blocked;
+    $("replay").disabled = blocked;
+    $("replay").textContent = t("replay");
+    if (state.phase === "GAME_OVER") {
+      $("pause").hidden = true;
+      $("result-copy").textContent = t(key);
+    }
+  } else {
+    $("network-status").textContent = t(key);
+    $("host").disabled = !terminal;
+    $("connect").disabled = !terminal;
+    $("network-cancel").hidden = terminal;
+    waiting = !terminal;
+  }
+}
 document.querySelectorAll("[data-role]").forEach(
   (b) =>
     (b.onclick = () => {
@@ -132,6 +174,7 @@ async function connect(mode) {
     );
     role = m.role;
     waiting = true;
+    $("network-cancel").hidden = false;
     $("network-status").textContent = tf("waiting", {
       code: m.code,
       role: t(m.role),
@@ -154,13 +197,16 @@ function lock() {
       .requestPointerLock()
       ?.catch(() => toast(t("pointerFallback")));
 }
-function begin(nextMode, nextRole) {
+function begin(nextMode, nextRole, capturePointer = true) {
+  sound.cancelAnnouncement();
   gallery.resetEffects();
   mode = nextMode;
   role = nextRole;
   paused = false;
   started = true;
   waiting = false;
+  connectionBlocked = false;
+  $("network-cancel").hidden = true;
   eventId = 0;
   sound.nextHeart = 0;
   lastPhase = "";
@@ -171,11 +217,11 @@ function begin(nextMode, nextRole) {
   $("pause").hidden = true;
   $("results").hidden = true;
   $("resume").disabled = false;
-  sound.start();
-  lock();
+  if (capturePointer) { sound.start(); lock(); }
 }
 function pause(value) {
   if (!started) return;
+  if (!value && connectionBlocked) return;
   paused = value;
   $("pause").hidden = !value;
   keys.clear();
@@ -184,14 +230,17 @@ function pause(value) {
     document.exitPointerLock();
     $("pause-copy").textContent =
       mode === "online" ? t("onlinePause") : t("soloPause");
-  } else lock();
+  } else { sound.start(); lock(); }
 }
 function menu() {
+  sound.stop();
   gallery.resetEffects();
   connection.close();
   mode = "menu";
   started = false;
   waiting = false;
+  connectionBlocked = false;
+  $("network-cancel").hidden = true;
   paused = false;
   keys.clear();
   $("hud").hidden = true;
@@ -210,6 +259,7 @@ $("pause-button").onclick = () => pause(true);
 $("resume").onclick = () => pause(false);
 $("return-menu").onclick = menu;
 $("result-menu").onclick = menu;
+$("network-cancel").onclick = menu;
 $("replay").onclick = () => {
   if (mode === "local") {
     game = new Game({ debug: true });
@@ -236,10 +286,10 @@ document.addEventListener("pointerlockchange", () => {
 });
 document.addEventListener("mousemove", (e) => {
   if ((document.pointerLockElement !== canvas && !dragLook) || paused) return;
-  view.yaw -= e.movementX * 0.0021;
+  view.yaw -= e.movementX * 0.0021 * settings.sensitivity;
   view.pitch = Math.max(
     -1.15,
-    Math.min(1.15, view.pitch - e.movementY * 0.0018),
+    Math.min(1.15, view.pitch - e.movementY * 0.0018 * settings.sensitivity * (settings.invertY ? -1 : 1)),
   );
 });
 const backYaw = () =>
@@ -272,6 +322,7 @@ function action(a) {
   }
 }
 document.addEventListener("keydown", (e) => {
+  if (settingsDialog.open || e.target.matches("input, select, textarea")) return;
   if (!started || e.target.matches("input")) return;
   if (
     ["Tab", "Space", "F2", "F3", "F4", "F6", "F7", "F8", "F9"].includes(e.code)
@@ -539,7 +590,8 @@ function frame(now) {
     for (const e of state.events) {
       if (e.id <= eventId) continue;
       eventId = e.id;
-      sound.event(e, state.players[role], role);
+      // STILL locks the body, but listening direction follows the free camera.
+      sound.event(e, { ...state.players[role], yaw: backYaw() }, role);
       if (e.type === "shot") gallery.shot(e.point, e.surface);
       if (e.type === "mark" && role === "detective" && e.placed)
         toast(t("markPlaced"));
@@ -611,3 +663,4 @@ window.still = {
     }
   },
 };
+connection.resumeSaved();

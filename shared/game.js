@@ -1,5 +1,5 @@
 import { CONFIG as C, STATES as S } from "./config.js";
-import { solids, spots, exit, statues } from "./world.js";
+import { solids, movementSolids, spots, exit, statues } from "./world.js";
 import { playerBodyParts } from "./body.js";
 import { updateBreath } from "./breath.js";
 import {
@@ -121,7 +121,7 @@ export class Game {
     const len = distance(from, to);
     const d = { x: (to.x - from.x) / (len || 1), y: 0, z: (to.z - from.z) / (len || 1) };
     const o = { x: from.x, y: 0, z: from.z };
-    for (const b of solids) {
+    for (const b of movementSolids) {
       if (b.type === "floor") continue;
       const support = spot && ["bench", "plinth"].includes(b.type)
         && Math.abs(b.y + b.h / 2 - spot.y) < .05
@@ -316,7 +316,7 @@ export class Game {
   canMove(x, z) {
     if (x < -23.45 || x > 23.45 || z < -19.45 || z > 23.5) return false;
     if (z > 19.4 && Math.abs(x) > 2.5) return false;
-    for (const b of solids) {
+    for (const b of movementSolids) {
       if (b.type === "floor") continue;
       if (
         Math.abs(x - b.x) < b.w / 2 + C.playerRadius &&

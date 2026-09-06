@@ -602,3 +602,15 @@ h1 { font-family: "Songti SC", "SimSun", Georgia, serif; font-weight: 700; lette
 .breath-bar.low { border: 1px solid currentColor; height: 6px; }
 .night .breath-bar.low i { background: #eee; }
 @media (max-width: 700px) { #menu { border-width: 6px; } }
+
+#settings { width: min(480px, 92vw); max-height: 90vh; overflow-y: auto; }
+#settings h2 { font-size: 34px; margin: 0 0 14px; }
+.settings-note, #settings-status { font-size: 12px; line-height: 1.7; }
+.settings-fields { display: grid; gap: 12px; margin: 24px 0; }
+.settings-fields label { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+.settings-fields input[type="range"] { width: 100%; margin: 0 0 10px; accent-color: #333; }
+.settings-fields input[type="checkbox"] { accent-color: #333; width: 18px; height: 18px; }
+.settings-fields select { font: inherit; background: transparent; color: inherit; padding: 8px; border: 1px solid #777; }
+.settings-actions { display: flex; gap: 16px; align-items: center; }
+.settings-actions button { flex: 1; }
+#pause-settings { width: 100%; padding: 10px; border-bottom: 1px solid #aaa; }

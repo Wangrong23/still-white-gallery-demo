@@ -13,4 +13,4 @@ The runtime uses independently transformed body parts, not a skinned skeleton. M
 
 Footsteps, gun, breakage and bell are offline synthesized WAV assets. Breath, heartbeat and room noise remain Web Audio synthesis. Closing speech uses the browser's Chinese/English TTS voice and falls back to the bell when unavailable. Final performed voice acting, motion capture and multiplayer balance are outside this art pass.
 
-Gameplay constraint: wall surfaces must remain uninterrupted and monochrome. Do not add contrasting skirting, wainscoting or trim. Daylight shading uses a black unlit endpoint and no ambient fill, shared by characters and architecture; never highlight the local killer independently.
+Gameplay constraint: wall surfaces must remain uninterrupted and monochrome. Do not add contrasting skirting, wainscoting or trim. Daylight shading uses no ambient fill and a shared linear-light shadow floor of 0.028 for characters and architecture; never highlight the local killer independently.

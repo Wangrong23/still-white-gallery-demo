@@ -12,6 +12,22 @@ shadowRamp.needsUpdate = true;
 const ink = new T.MeshToonMaterial({ color: 0x101010, gradientMap: shadowRamp, shadowSide: T.BackSide });
 const white = new T.MeshToonMaterial({ color: 0xf2f2f2, gradientMap: shadowRamp, shadowSide: T.BackSide });
 const gray = new T.MeshToonMaterial({ color: 0xbcbcbc, gradientMap: shadowRamp, shadowSide: T.BackSide });
+// A common linear-light floor lifts only dark surfaces. Unlike ambient light,
+// it does not multiply each object's albedo and reveal the figure in shelter.
+const shadowFloor = { value: 0.028 };
+function softenShadows(material) {
+  material.onBeforeCompile = (shader) => {
+    shader.uniforms.shadowFloor = shadowFloor;
+    shader.fragmentShader = "uniform float shadowFloor;\n" + shader.fragmentShader;
+    shader.fragmentShader = shader.fragmentShader.replace(
+      "#include <opaque_fragment>",
+      "outgoingLight = max(outgoingLight, vec3(shadowFloor));\n#include <opaque_fragment>",
+    );
+  };
+  material.customProgramCacheKey = () => "shared-shadow-floor-v1";
+  return material;
+}
+[ink, white, gray].forEach(softenShadows);
 const lineMat = new T.LineBasicMaterial({
   color: 0x292929,
   transparent: true,
@@ -148,6 +164,14 @@ export class Gallery {
     this.camera.aspect = innerWidth / innerHeight;
     this.camera.updateProjectionMatrix();
     this.renderer.setSize(innerWidth, innerHeight);
+  }
+  configure(settings) {
+    const scale = settings.quality === "performance" ? Math.min(devicePixelRatio * .75, 1)
+      : Math.min(devicePixelRatio, 1.6);
+    if (scale !== this.renderer.getPixelRatio()) {
+      this.renderer.setPixelRatio(scale);
+      this.resize();
+    }
   }
   buildWorld() {
     for (const b of solids) {
@@ -339,7 +363,7 @@ export class Gallery {
     paper.position.z = 0.05;
     g.add(paper);
     const print = new T.Mesh(new T.PlaneGeometry(2.36, 2.02),
-      new T.MeshToonMaterial({ map: posterTexture(Math.abs(z)), gradientMap: shadowRamp, shadowSide: T.BackSide }));
+      softenShadows(new T.MeshToonMaterial({ map: posterTexture(Math.abs(z)), gradientMap: shadowRamp, shadowSide: T.BackSide })));
     print.position.z = .065;
     print.receiveShadow = true;
     g.add(print);
@@ -349,6 +373,7 @@ export class Gallery {
     const g = new T.Group();
     g.position.set(p.x, 0, p.z);
     this.world.add(g);
+    this.blockers.push(g);
     if (p.type === "coat") {
       const stem = cube(0.08, 1.9, 0.08, ink);
       stem.position.y = 0.95;
@@ -547,6 +572,7 @@ export class Gallery {
     this.sun.position.set(sun.x, sun.y, sun.z);
     this.sun.intensity = night || sunset ? 0 : 3.2;
     this.ambient.intensity = night ? 0.028 : 0;
+    shadowFloor.value = night || sunset ? 0 : 0.028;
     this.scene.background.set(night || sunset ? 0x030303 : 0xe6e6e6);
     this.scene.fog.color.copy(this.scene.background);
     this.gate.visible = state.phase === "PREPARATION";

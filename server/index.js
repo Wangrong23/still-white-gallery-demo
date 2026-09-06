@@ -10,6 +10,7 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 export function createApp({
   port = Number(process.env.PORT) || 5000,
   host = process.env.HOST || "::",
+  reconnectGraceMs = 30000,
 } = {}) {
   const types = {
     ".html": "text/html; charset=utf-8",
@@ -61,11 +62,22 @@ export function createApp({
   });
   const wss = new WebSocketServer({ server, path: "/ws", maxPayload: 4096 });
   const rooms = new Map();
+  let shuttingDown = false;
   const send = (ws, data) => {
     if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(data));
   };
   const broadcast = (room, data) => {
     for (const p of room.clients.values()) send(p, data);
+  };
+  const finishRoom = (room, reason = "left") => {
+    rooms.delete(room.code);
+    room.active = false;
+    for (const ws of room.clients.values()) {
+      ws.room = null;
+      send(ws, { type: "peer-left", reason });
+    }
+    room.clients.clear();
+    room.seats.clear();
   };
   wss.on("connection", (ws) => {
     ws.alive = true;
@@ -87,6 +99,28 @@ export function createApp({
         }
         const m = JSON.parse(raw);
         if (!m || typeof m !== "object") return;
+        if (m.type === "resume") {
+          if (ws.room) return;
+          const room = rooms.get(String(m.code || "").toUpperCase());
+          const seat = room?.seats.get(m.role);
+          if (!room || !seat || typeof m.token !== "string" || seat.token !== m.token
+            || (room.resumeUntil && Date.now() >= room.resumeUntil)) {
+            send(ws, { type: "error", code: "resume-expired", message: "原房间已失效，无法恢复本局。" });
+            return;
+          }
+          const old = room.clients.get(m.role);
+          if (old && old !== ws) { old.room = null; old.close(1000, "Session restored elsewhere"); }
+          ws.room = room;
+          ws.role = m.role;
+          room.clients.set(ws.role, ws);
+          if (room.clients.size === room.seats.size) room.resumeUntil = null;
+          room.active = room.started && room.clients.size === 2;
+          send(ws, { type: "room", code: room.code, role: ws.role, token: seat.token,
+            resumed: true, active: room.active, started: room.started, state: room.game.state,
+            reconnectGraceMs });
+          if (room.active) broadcast(room, { type: "resumed" });
+          return;
+        }
         if (m.type === "host" || m.type === "join") {
           if (ws.room) return;
           let room, role;
@@ -107,14 +141,17 @@ export function createApp({
               code,
               game: new Game(),
               clients: new Map(),
+              seats: new Map(),
               ready: new Set(),
               active: false,
+              started: false,
+              resumeUntil: null,
               created: Date.now(),
             };
             rooms.set(code, room);
           } else {
             room = rooms.get(String(m.code || "").toUpperCase());
-            if (!room || room.clients.size >= 2 || room.active) {
+            if (!room || room.seats.size >= 2 || room.started || room.resumeUntil || room.clients.size !== 1) {
               send(ws, {
                 type: "error",
                 message: "房间不存在、已满或游戏已经开始。",
@@ -126,9 +163,12 @@ export function createApp({
           ws.room = room;
           ws.role = role;
           room.clients.set(role, ws);
-          send(ws, { type: "room", code: room.code, role });
+          const token = randomBytes(24).toString("hex");
+          room.seats.set(role, { token });
+          send(ws, { type: "room", code: room.code, role, token, reconnectGraceMs });
           if (room.clients.size === 2) {
             room.active = true;
+            room.started = true;
             broadcast(room, { type: "start" });
             broadcast(room, { type: "state", state: room.game.state });
           }
@@ -136,13 +176,14 @@ export function createApp({
         }
         const room = ws.room;
         if (!room) return;
+        if (m.type === "leave") { finishRoom(room); return; }
         if (m.type === "input" && room.active) {
           ws.lastInput = Date.now();
           room.game.input(ws.role, m.input || {});
         }
         if (m.type === "action" && room.active)
           room.game.action(ws.role, m.action);
-        if (m.type === "rematch" && room.game.state.phase === "GAME_OVER") {
+        if (m.type === "rematch" && room.active && room.game.state.phase === "GAME_OVER") {
           room.ready.add(ws.role);
           broadcast(room, { type: "waiting-rematch", count: room.ready.size });
           if (room.ready.size === 2) {
@@ -157,14 +198,13 @@ export function createApp({
     });
     ws.on("close", () => {
       const room = ws.room;
-      if (!room) return;
+      if (!room || shuttingDown || room.clients.get(ws.role) !== ws) return;
       room.clients.delete(ws.role);
       room.active = false;
-      for (const other of room.clients.values()) {
-        other.room = null;
-        send(other, { type: "peer-left" });
-      }
-      rooms.delete(room.code);
+      room.game.inputs = {};
+      room.ready.clear();
+      room.resumeUntil ??= Date.now() + reconnectGraceMs;
+      broadcast(room, { type: "peer-reconnecting", remainingMs: Math.max(0, room.resumeUntil - Date.now()) });
     });
     ws.on("error", () => {});
   });
@@ -176,6 +216,7 @@ export function createApp({
     last = now;
     accum += dt;
     for (const room of rooms.values()) {
+      if (room.resumeUntil && Date.now() >= room.resumeUntil) { finishRoom(room, "expired"); continue; }
       if (!room.active) continue;
       for (const [role, ws] of room.clients) {
         if (Date.now() - ws.lastInput > 500)
@@ -200,9 +241,7 @@ export function createApp({
       ws.ping();
     }
     for (const room of rooms.values())
-      if (!room.active && Date.now() - room.created > 600000) {
-        for (const ws of room.clients.values()) ws.close(1000, "Lobby expired");
-      }
+      if (!room.started && Date.now() - room.created > 600000) finishRoom(room, "expired");
   }, 15000);
   return {
     server,
@@ -218,6 +257,7 @@ export function createApp({
       ),
     close: () =>
       new Promise((r) => {
+        shuttingDown = true;
         clearInterval(tick);
         clearInterval(heartbeat);
         for (const ws of wss.clients) ws.terminate();
