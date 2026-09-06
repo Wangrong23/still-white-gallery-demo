@@ -9,15 +9,9 @@ export const sculptureGeometry = Object.fromEntries(Object.entries(noirMeshes).m
   return [name, geometry];
 }));
 
-export function decorateGallery(world, solids, material) {
-  // All relief sits against existing collision surfaces; corridors stay clear.
+export function decorateGallery(world, material) {
+  // Keep walls uninterrupted: contrasting trim exposes a hidden silhouette.
   const pieces = [];
-  for (const b of solids) {
-    if (b.h < 3 || b.type === "floor") continue;
-    pieces.push([b.x, .42, b.z, b.w + .025, .84, b.d + .025]);
-    pieces.push([b.x, 1, b.z, b.w + .045, .045, b.d + .045]);
-    pieces.push([b.x, b.y + b.h / 2 - .14, b.z, b.w + .04, .09, b.d + .04]);
-  }
   // Sparse paired strips make readable, intentional skylight shadows.
   for (const x of [-18, -12, -3, 3, 12, 18])
     pieces.push([x, 5.55, -7, .32, .12, 24]);

@@ -4,9 +4,14 @@ import { solids, spots, statues, props, rooms } from "../shared/world.js";
 import { bodyParts, playerBodyParts } from "../shared/body.js";
 import { sunAt } from "../shared/sun.js";
 
-const ink = new T.MeshToonMaterial({ color: 0x101010, shadowSide: T.BackSide });
-const white = new T.MeshToonMaterial({ color: 0xf2f2f2, shadowSide: T.BackSide });
-const gray = new T.MeshToonMaterial({ color: 0xbcbcbc, shadowSide: T.BackSide });
+// Three's default Toon ramp illuminates even negative N·L at 70% strength.
+// An unlit wall and an occluded figure must instead share a black endpoint.
+const shadowRamp = new T.DataTexture(new Uint8Array([0, 0, 180, 255]), 4, 1, T.RedFormat);
+shadowRamp.minFilter = shadowRamp.magFilter = T.NearestFilter;
+shadowRamp.needsUpdate = true;
+const ink = new T.MeshToonMaterial({ color: 0x101010, gradientMap: shadowRamp, shadowSide: T.BackSide });
+const white = new T.MeshToonMaterial({ color: 0xf2f2f2, gradientMap: shadowRamp, shadowSide: T.BackSide });
+const gray = new T.MeshToonMaterial({ color: 0xbcbcbc, gradientMap: shadowRamp, shadowSide: T.BackSide });
 const lineMat = new T.LineBasicMaterial({
   color: 0x292929,
   transparent: true,
@@ -91,10 +96,12 @@ export class Gallery {
       near: 0.5,
       far: 130,
     });
-    this.sun.shadow.bias = -0.0015;
+    this.sun.shadow.bias = -0.0003;
     this.sun.shadow.normalBias = 0;
     this.scene.add(this.sun, this.sun.target);
-    this.ambient = new T.AmbientLight(0xffffff, 0.48);
+    // Daytime occlusion must extinguish the figure along with its background.
+    // Ambient fill bypasses shadows and made the white body glow in shelter.
+    this.ambient = new T.AmbientLight(0xffffff, 0);
     this.scene.add(this.ambient);
     this.flash = new T.SpotLight(0xffffff, 65, 27, 0.34, 0.34, 1.5);
     this.flash.castShadow = true;
@@ -163,7 +170,7 @@ export class Gallery {
         }
       }
     }
-    decorateGallery(this.world, solids, ink);
+    decorateGallery(this.world, ink);
     // Ink joints and scattered fine hatch strokes replace glossy surface detail.
     const points = [];
     for (let x = -24; x <= 24; x += 3) {
@@ -332,7 +339,7 @@ export class Gallery {
     paper.position.z = 0.05;
     g.add(paper);
     const print = new T.Mesh(new T.PlaneGeometry(2.36, 2.02),
-      new T.MeshToonMaterial({ map: posterTexture(Math.abs(z)), shadowSide: T.BackSide }));
+      new T.MeshToonMaterial({ map: posterTexture(Math.abs(z)), gradientMap: shadowRamp, shadowSide: T.BackSide }));
     print.position.z = .065;
     print.receiveShadow = true;
     g.add(print);
@@ -539,7 +546,7 @@ export class Gallery {
     const sun = sunAt(state.dayTime);
     this.sun.position.set(sun.x, sun.y, sun.z);
     this.sun.intensity = night || sunset ? 0 : 3.2;
-    this.ambient.intensity = night ? 0.028 : sunset ? 0.006 : 0.48;
+    this.ambient.intensity = night ? 0.028 : 0;
     this.scene.background.set(night || sunset ? 0x030303 : 0xe6e6e6);
     this.scene.fog.color.copy(this.scene.background);
     this.gate.visible = state.phase === "PREPARATION";
