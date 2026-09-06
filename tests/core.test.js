@@ -77,7 +77,7 @@ test("wrong shots spend ammo, move sun, never end the game at zero ammo", () => 
     advance(g, 0.7);
   }
   assert.equal(g.state.ammo, 0);
-  assert.ok(g.state.dayTime >= 140);
+  assert.ok(g.state.dayTime >= C.detectiveAmmo * C.wrongShotPenalty);
   assert.equal(g.state.phase, "DAY");
   g.action("detective", "shoot");
   assert.equal(g.state.ammo, 0);

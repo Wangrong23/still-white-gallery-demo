@@ -50,7 +50,9 @@ export function posterTexture(variant) {
   }
   c.restore(); c.fillStyle="#242424"; c.textAlign="center";
   c.font="34px Georgia"; c.fillText(variant%2 ? "AFTER HOURS" : "THE SILENT FORM",256,551);
-  c.font="15px monospace"; c.fillText("WHITE GALLERY  /  1936",256,585);
+  c.font="15px monospace"; c.fillText("WHITE GALLERY  /  1934",256,585);
+  c.font="16px Georgia";
+  c.fillText(variant % 2 ? "PRIVATE COLLECTION / LENDER WITHHELD" : "CATALOGUE / SIX FIGURE STUDIES",256,610);
   const texture = new T.CanvasTexture(canvas); texture.colorSpace=T.SRGBColorSpace;
   return texture;
 }

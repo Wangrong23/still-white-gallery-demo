@@ -7,6 +7,25 @@ import { distance } from "../shared/math.js";
 const day = () => { const g = new Game(); g.phase('DAY'); return g; };
 const advance = (g, seconds) => { for(let i=0;i<Math.round(seconds/.05);i++) g.tick(.05); };
 
+test('idle settles automatically, movement wakes immediately, and night stays mobile', () => {
+  const g=day(),p=g.state.players.killer;
+  g.input('killer',{});advance(g,.5);assert.equal(p.still,false);
+  advance(g,.15);assert.equal(p.still,true);assert.equal(p.holding,false);
+  g.input('killer',{forward:1});assert.equal(p.still,false);
+  advance(g,.1);assert.ok(p.moving);
+  g.phase('NIGHT');g.input('killer',{});advance(g,1);assert.equal(p.still,false);
+});
+
+test('F attaches to ordinary wall faces without crossing walls and exits safely', () => {
+  for (const [x,z] of [[0,-19],[-23,3],[23,3],[0,-12.3]]) {
+    const g=day(),p=g.state.players.killer;Object.assign(p,{x,z});
+    const target=g.nearestSpot();assert.equal(target.pose,'wall');
+    g.action('killer','pose');advance(g,.35);
+    assert.equal(p.pose,'wall');assert.ok(g.canStandAt(p.x,p.z));
+    assert.ok(distance(p,target)<.001);g.leaveStill();assert.ok(g.canStandAt(p.x,p.z));
+  }
+});
+
 test('E freezes arbitrary floor positions exactly, even beside an exhibit', () => {
   for (const [x,z] of [[0,-2],[4,0],[-13,5],[0,-3.5]]) {
     const g=day(), p=g.state.players.killer;
@@ -48,7 +67,8 @@ test('F blends a selected pose and its hit geometry, then exits to the approach 
 test('pose preview and action reject walls, occupied destinations and invalid floors', () => {
   const g=day(),p=g.state.players.killer;
   Object.assign(p,{x:9.7,z:15}); // Opposite side of the wall from spot 11.
-  assert.equal(g.nearestSpot(),undefined);g.action('killer','pose');assert.equal(p.still,false);
+  assert.equal(g.nearestSpot().pose,'wall');
+  g.action('killer','pose');advance(g,.35);assert.ok(p.x > 9);g.leaveStill();
   Object.assign(p,{x:0,z:-3.5});Object.assign(g.state.players.detective,{x:0,z:-5});
   assert.equal(g.nearestSpot(),undefined);g.action('killer','pose');assert.equal(p.still,false);
   Object.assign(p,{x:24,z:0});g.action('killer','still');assert.equal(p.still,false);

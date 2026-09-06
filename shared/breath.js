@@ -36,6 +36,6 @@ export function updateBreath(p, pressed, dt, allowed) {
     * C.breathTransition * (1 - decay);
   p.breathPhase += phaseStep * 2.1;
   p.breathRate = targetRate + (p.breathRate - targetRate) * decay;
-  p.breathOffset = p.still ? Math.sin(p.breathPhase) * 0.009 : 0;
+  p.breathOffset = p.still ? Math.sin(p.breathPhase) * 0.016 : 0;
   return exhausted;
 }

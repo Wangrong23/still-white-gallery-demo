@@ -9,6 +9,8 @@ export class Sound {
     this.settings = { volume: 1, ambience: 1, voice: true };
     this.closingTimer = null;
     this.activeSources = new Set();
+    this.variantIndex = new Map();
+    this.announcementSource = null;
   }
   configure(settings) {
     this.settings = settings;
@@ -23,6 +25,8 @@ export class Sound {
   cancelAnnouncement() {
     clearTimeout(this.closingTimer);
     this.closingTimer = null;
+    try { this.announcementSource?.stop(); } catch { /* Already ended. */ }
+    this.announcementSource = null;
     if (typeof window !== "undefined" && "speechSynthesis" in window) window.speechSynthesis.cancel();
   }
   stop() {
@@ -31,6 +35,7 @@ export class Sound {
       try { source.stop(); } catch { /* Already ended. */ }
     }
     this.activeSources.clear();
+    if (this.roomReverb) this.roomReverb.buffer = null;
     this.ctx?.suspend();
     this.nextHeart = 0;
   }
@@ -44,11 +49,17 @@ export class Sound {
       this.master = this.ctx.createGain();
       this.master.gain.value = 0.3 * this.settings.volume;
       this.master.connect(this.ctx.destination);
-      for (const name of ["heel", "revolver", "plaster", "bell"]) {
+      this.roomReverb = this.ctx.createConvolver();
+      this.roomReverb.normalize = false;
+      this.roomReverb.connect(this.master);
+      for (const name of ["heel", "heel-2", "heel-3", "revolver", "plaster", "plaster-2", "bell", "hall-ir", "closing-en"]) {
         fetch(`/client/assets/${name}.wav`)
           .then((r) => { if (!r.ok) throw new Error(name); return r.arrayBuffer(); })
           .then((data) => this.ctx.decodeAudioData(data))
-          .then((buffer) => this.samples.set(name, buffer))
+          .then((buffer) => {
+            if (name === "hall-ir") { this.roomImpulse = buffer; this.roomReverb.buffer = buffer; }
+            else this.samples.set(name, buffer);
+          })
           .catch(() => { /* Procedural fallback remains available offline. */ });
       }
       const size = this.ctx.sampleRate * 2,
@@ -68,7 +79,14 @@ export class Sound {
       source.connect(gain).connect(this.master);
       source.start();
     }
+    if (this.roomImpulse && !this.roomReverb.buffer) this.roomReverb.buffer = this.roomImpulse;
     this.ctx.resume();
+  }
+  variant(base, count) {
+    const index = this.variantIndex.get(base) || 0;
+    this.variantIndex.set(base, (index + 1) % count);
+    const name = index ? `${base}-${index + 1}` : base;
+    return this.samples.has(name) ? name : base;
   }
   sample(name, volume, pan = 0, rate = 1, frequency = 20000) {
     if (!this.ctx || this.muted) return false;
@@ -82,8 +100,28 @@ export class Sound {
     source.playbackRate.value = rate;
     gain.gain.value = volume;
     p.pan.value = pan;
-    source.connect(filter).connect(gain).connect(p).connect(this.master);
-    source.onended = () => { source.disconnect(); filter.disconnect(); gain.disconnect(); p.disconnect(); };
+    const voice = name.startsWith("closing-");
+    let highpass, speaker;
+    if (voice) {
+      highpass = this.ctx.createBiquadFilter();
+      highpass.type = "highpass";
+      highpass.frequency.value = 340;
+      speaker = this.ctx.createWaveShaper();
+      this.speakerCurve ||= Float32Array.from({ length: 256 }, (_, i) => Math.tanh((i / 127.5 - 1) * 1.8) / Math.tanh(1.8));
+      speaker.curve = this.speakerCurve;
+      source.connect(highpass).connect(speaker).connect(filter);
+      this.announcementSource = source;
+    } else source.connect(filter);
+    filter.connect(gain).connect(p).connect(this.master);
+    // Reflections follow the same distance/occlusion gain as the direct sound.
+    const reflection = this.ctx.createGain();
+    reflection.gain.value = name.startsWith("heel") ? .055 : voice ? .12 : .16;
+    if (this.roomReverb?.buffer) p.connect(reflection).connect(this.roomReverb);
+    source.onended = () => {
+      source.disconnect(); filter.disconnect(); gain.disconnect(); p.disconnect(); reflection.disconnect();
+      highpass?.disconnect(); speaker?.disconnect();
+      if (this.announcementSource === source) this.announcementSource = null;
+    };
     this.track(source);
     source.start();
     return true;
@@ -154,7 +192,7 @@ export class Sound {
     if (e.type === "step" && vol > 0) {
       const step = spatialAcoustics(e, listener);
       if (!step.gain) return;
-      if (this.sample("heel", step.gain * (e.role === "detective" ? .28 : .19), step.pan,
+      if (this.sample(this.variant("heel", 3), step.gain * (e.role === "detective" ? .28 : .19), step.pan,
         .94 + Math.random() * .12, step.frequency)) return;
       this.noise(0.07, step.gain * (e.role === "detective" ? 0.21 : 0.15), step.pan, step.frequency);
       this.tone(
@@ -181,25 +219,31 @@ export class Sound {
       this.tone(880, 0.13, 0.22);
       this.tone(660, 0.2, 0.18, "sine", 0, 0.16);
     }
-    if (e.type === "shatter" && !this.sample("plaster", vol * .5, pan)) this.noise(0.4, vol * 0.5, pan, 4800);
+    if (e.type === "shatter" && !this.sample(this.variant("plaster", 2), vol * .5, pan)) this.noise(0.4, vol * 0.5, pan, 4800);
     if (e.type === "phase" && e.phase === "SUNSET") {
       if (!this.sample("bell", .4)) for (let i = 0; i < 3; i++)
         this.tone(420 - i * 65, 1.2, 0.3, "sine", 0, i * 0.45);
       this.cancelAnnouncement();
-      this.closingTimer = setTimeout(() => { this.closingTimer = null; this.noise(0.12, 0.3, 0, 4000); }, 900);
-      if (this.settings.voice && "speechSynthesis" in window) {
-        const chinese = localStorage.getItem("still.language") !== "en";
-        const u = new SpeechSynthesisUtterance(
-          chinese ? "展馆即将闭馆。请前往出口。" : "The gallery is now closed. Please proceed to the exit.",
-        );
-        u.lang = chinese ? "zh-CN" : "en-US";
-        u.rate = 0.8;
-        u.pitch = 0.65;
-        u.volume = 0.35 * this.settings.volume;
-        window.speechSynthesis.speak(u);
-      }
+      this.closingTimer = setTimeout(() => {
+        this.closingTimer = null;
+        this.noise(.07, .12, 0, 2200);
+        this.announce();
+      }, 900);
     }
   }
+  announce() {
+    if (this.muted || !this.settings.voice) return;
+    if (this.sample("closing-en", .5, 0, 1, 2600)) return;
+    if ("speechSynthesis" in window) {
+      const u = new SpeechSynthesisUtterance("It is closing time. Would the last visitor please leave the gallery.");
+      u.lang = "en-US";
+      u.rate = .8;
+      u.pitch = .65;
+      u.volume = .35 * this.settings.volume;
+      window.speechSynthesis.speak(u);
+    }
+  }
+
   update(tension, time, night) {
     if (time < this.nextHeart) return;
     this.nextHeart = time + (night ? 0.8 : 1.45 - tension * 0.85);

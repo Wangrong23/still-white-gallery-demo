@@ -52,17 +52,5 @@ source.mkdir(exist_ok=True)
 bpy.context.preferences.filepaths.save_version = 0
 bpy.ops.wm.save_as_mainfile(filepath=str(source / 'noir-parts.blend'))
 
-rate = 22050
-rng = random.Random(1930)
-def write_sound(name, duration, synth):
-    values = [synth(i/rate, rng.uniform(-1,1)) for i in range(int(rate*duration))]
-    peak = max(abs(v) for v in values) or 1
-    with wave.open(str(out / (name+'.wav')), 'wb') as f:
-        f.setparams((1,2,rate,0,'NONE','not compressed'))
-        f.writeframes(b''.join(struct.pack('<h',int(v/peak*27000)) for v in values))
-
-write_sound('heel', .24, lambda t,n: n*math.exp(-t*75)*.7 + math.sin(t*2*math.pi*160)*math.exp(-t*30)*.3)
-write_sound('revolver', 1.2, lambda t,n: n*(math.exp(-t*65)+.19*math.exp(-t*5)) + math.sin(2*math.pi*(95*t-23*t*t))*math.exp(-t*13)*.5)
-write_sound('plaster', .85, lambda t,n: n*math.exp(-t*5)*(.14+.7*max(0,math.cos(t*91))**12))
-write_sound('bell', 2.5, lambda t,n: min(1,t*150)*math.exp(-t*2.3)*(math.sin(2*math.pi*370*t)+.36*math.sin(2*math.pi*973*t)+.17*math.sin(2*math.pi*1531*t)))
-print('Generated 10 mesh templates and 4 original sound effects.')
+import runpy
+runpy.run_path(str(root / 'scripts' / 'make-noir-audio.py'), run_name='__main__')

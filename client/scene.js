@@ -1,8 +1,10 @@
 import * as T from "three";
+import { CONFIG as C } from "../shared/config.js";
 import { sculptureGeometry, decorateGallery, posterTexture } from "./noir.js";
 import { solids, spots, statues, props, rooms } from "../shared/world.js";
 import { bodyParts, playerBodyParts } from "../shared/body.js";
 import { sunAt } from "../shared/sun.js";
+import { t } from "./i18n.js";
 
 // Three's default Toon ramp illuminates even negative N·L at 70% strength.
 // An unlit wall and an occluded figure must instead share a black endpoint.
@@ -179,13 +181,25 @@ export class Gallery {
         b.w,
         b.h,
         b.d,
-        b.type === "floor" ? white : b.type === "case" ? gray : white,
+        b.type === "frame" ? ink : ["case", "crate"].includes(b.type) ? gray : white,
         b.type !== "floor",
       );
       mesh.position.set(b.x, b.y, b.z);
       mesh.userData.solid = b;
       this.world.add(mesh);
       if (b.type !== "floor") this.blockers.push(mesh);
+      if (b.type === "crate") {
+        // Inset bands stay inside the solid box: no decorative ghost collisions.
+        for (const dx of [-b.w * .32, b.w * .32]) {
+          const band = cube(.07, b.h - .04, .008, ink, false);
+          band.position.set(b.x + dx, b.y, b.z - b.d / 2 - .002);
+          this.world.add(band);
+        }
+        const shipping = label("WHITE GALLERY / HOLD", Math.min(1.3, b.w-.1), .16);
+        shipping.rotation.y = -Math.PI / 2;
+        shipping.position.set(b.x-b.w/2-.006, b.y, b.z);
+        this.world.add(shipping);
+      }
       if (b.type === "bench") {
         for (const dx of [-1.2, 1.2]) {
           const leg = cube(0.1, 0.35, 0.7, ink);
@@ -275,7 +289,7 @@ export class Gallery {
     }
     for (const side of [-1, 1])
       for (const z of [-13, -5, 6, 14])
-        this.artFrame(side * 23.75, 2.5, z, side);
+        if (!(side < 0 && z > 0)) this.artFrame(side * 23.75, 2.5, z, side);
     const title = label("THE WHITE GALLERY", 6, 0.8);
     title.position.set(0, 3.1, -19.75);
     this.world.add(title);
@@ -484,7 +498,7 @@ export class Gallery {
       m.rotation.set(part.rx || 0, 0, part.rz || 0);
     });
     const head = parts.find((p) => p.name === "head");
-    a.userData.face.position.y = head.y;
+    a.userData.face.position.set(head.x, head.y, head.z);
     a.userData.face.children[0].scale.y = 1;
     a.userData.face.children[1].scale.y = 1;
     a.userData.mouth.visible = false;
@@ -531,7 +545,7 @@ export class Gallery {
       mesh.rotation.x = -Math.PI / 2;
       mesh.position.set(s.x, s.y + 0.012, s.z);
       this.spotHints.add(mesh);
-      const l = label(`${s.id + 1} / ${s.pose}`, 1.4, 0.22);
+      const l = label(`${s.id + 1} / ${t(`pose_${s.pose}`)}`, 1.4, 0.22);
       l.position.set(s.x, s.y + 2.25, s.z);
       this.spotHints.add(l);
     }
@@ -566,7 +580,7 @@ export class Gallery {
     this.updateDestroyed(state.destroyedStatues, dt);
     const night =
       state.phase === "NIGHT" ||
-      (state.phase === "GAME_OVER" && state.dayTime >= 420);
+      (state.phase === "GAME_OVER" && state.dayTime >= C.dayDuration);
     const sunset = state.phase === "SUNSET";
     const sun = sunAt(state.dayTime);
     this.sun.position.set(sun.x, sun.y, sun.z);
@@ -623,7 +637,7 @@ export class Gallery {
     } else {
       const target = new T.Vector3(
         p.x,
-        (p.y || 0) + (p.pose === "sit" ? 0.8 : 1.4),
+        (p.y || 0) + (p.pose === "sit" ? .65 : 1.4),
         p.z,
       );
       let distance = 3.05;

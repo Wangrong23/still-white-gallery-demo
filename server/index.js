@@ -180,6 +180,8 @@ export function createApp({
         if (m.type === "input" && room.active) {
           ws.lastInput = Date.now();
           room.game.input(ws.role, m.input || {});
+          if (Number.isSafeInteger(m.seq) && m.seq > 0)
+            ws.pendingInputSeq = Math.max(ws.pendingInputSeq || 0, m.seq);
         }
         if (m.type === "action" && room.active)
           room.game.action(ws.role, m.action);
@@ -226,6 +228,8 @@ export function createApp({
           });
       }
       room.game.tick(dt);
+      for (const [role, ws] of room.clients)
+        room.game.state.players[role].inputAck = ws.pendingInputSeq || 0;
       if (accum >= 1 / CONFIG.snapshotHz)
         broadcast(room, { type: "state", state: room.game.state });
     }

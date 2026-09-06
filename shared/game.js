@@ -19,9 +19,11 @@ const player = (role) => ({
   yaw: 0,
   pitch: 0,
   still: false,
+  idleTime: 0,
   spotId: null,
   pose: "stand",
   poseFrom: null,
+  poseFromY: 0,
   poseMix: 1,
   stillTransition: null,
   stillExit: null,
@@ -39,6 +41,8 @@ const player = (role) => ({
   sprint: 0,
   flashlight: true,
   step: 0,
+  moveBlend: 0,
+  turnBlend: 0,
   inspectTarget: null,
   inspectProgress: 0,
 });
@@ -106,11 +110,31 @@ export class Game {
   }
   nearestSpot() {
     const p = this.state.players.killer;
-    return spots
+    return [...spots, ...this.wallPoses()]
       .filter((s) => distance(s, p) <= s.range && this.canStandAt(p.x, p.z)
         && this.posePathClear(p, s, s)
         && distance(s, this.state.players.detective) >= 0.65)
       .sort((a, b) => distance(a, p) - distance(b, p))[0];
+  }
+  wallPoses() {
+    const p = this.state.players.killer, candidates = [];
+    // Sample the nearest point on each broad wall face; leave room at corners.
+    for (const b of solids.filter(b => b.type === "wall" && b.h >= 2)) {
+      for (const sign of [-1, 1]) {
+        const alongX = b.w >= b.d;
+        const half = (alongX ? b.w : b.d) / 2;
+        if (half < .4) continue;
+        const along = clamp(alongX ? p.x : p.z,
+          (alongX ? b.x : b.z) - half + .35, (alongX ? b.x : b.z) + half - .35);
+        const nx = alongX ? 0 : sign, nz = alongX ? sign : 0;
+        const target = { id: `wall:${b.id}:${sign}`, pose: "wall", range: 1.05, y: 0,
+          x: alongX ? along : b.x + sign * (b.w / 2 + C.playerRadius + .08),
+          z: alongX ? b.z + sign * (b.d / 2 + C.playerRadius + .08) : along,
+          yaw: Math.atan2(-nx, -nz) };
+        if (distance(p, target) <= target.range && this.canStandAt(target.x, target.z)) candidates.push(target);
+      }
+    }
+    return candidates;
   }
   canStandAt(x, z) {
     return this.canMove(x, z)
@@ -140,6 +164,7 @@ export class Game {
   leaveStill() {
     const p = this.state.players.killer;
     if (!p.still) return;
+    const previousPose = p.pose, previousY = p.y, interrupted = !!p.stillTransition;
     const spot = spots[p.spotId];
     if (spot || !this.canStandAt(p.x, p.z)) {
       const candidates = p.stillExit ? [p.stillExit] : [];
@@ -153,9 +178,11 @@ export class Game {
       p.z = target.z;
     }
     p.still = false;
+    p.idleTime = 0;
     p.pose = "stand";
-    p.poseFrom = null;
-    p.poseMix = 1;
+    p.poseFrom = interrupted ? null : previousPose;
+    p.poseFromY = interrupted ? 0 : previousY;
+    p.poseMix = interrupted ? 1 : 0;
     p.stillTransition = null;
     p.stillExit = null;
     if (p.holding) p.breathDelay = C.breathRecoveryDelay;
@@ -181,6 +208,7 @@ export class Game {
       if (["still", "unstill"].includes(action) && p.still) this.leaveStill();
       else if (action === "still" && this.canStandAt(p.x, p.z)) {
         Object.assign(p, { still: true, spotId: null, pose: "stand", moving: false,
+          poseFrom: null, poseFromY: 0, poseMix: 1,
           stillForward: this.inputs.killer?.forward || 0, stillStrafe: this.inputs.killer?.strafe || 0 });
         this.event("still", { spotId: null });
       } else if (action === "pose" && (!p.still || p.spotId === null)) {
@@ -190,6 +218,7 @@ export class Game {
             stillExit: { x: p.x, z: p.z },
             stillTransition: { from: { x: p.x, y: p.y, z: p.z, yaw: p.yaw }, to: spot, time: 0 },
             poseFrom: p.pose,
+            poseFromY: 0,
             poseMix: 0,
             still: true,
             spotId: spot.id,
@@ -497,6 +526,11 @@ export class Game {
         }
       }
       p.moving = false;
+      if (!p.still && p.poseFrom && p.poseMix < 1) {
+        p.poseMix = Math.min(1, p.poseMix + dt / .22);
+        if (p.poseMix === 1) { p.poseFrom = null; p.poseFromY = 0; }
+      }
+      const previousYaw = p.yaw;
       if (!p.still) {
         p.yaw = i.yaw ?? p.yaw;
         p.pitch = i.pitch ?? p.pitch;
@@ -539,14 +573,24 @@ export class Game {
         p.moving = distance(old, p) > 0.001;
         if (p.moving) {
           const prev = Math.floor(p.step / 0.47);
-          p.step += dt * (speed / 2.65);
+          p.step += distance(old, p) / 2.65;
           if (Math.floor(p.step / 0.47) > prev)
             this.event("step", { role, x: p.x, z: p.z });
         }
       }
+      const blendRate = 1 - Math.exp(-dt * 12);
+      p.moveBlend = p.still ? 0 : (p.moveBlend || 0) + ((p.moving ? 1 : 0) - (p.moveBlend || 0)) * blendRate;
+      const turn = Math.atan2(Math.sin(p.yaw - previousYaw), Math.cos(p.yaw - previousYaw));
+      const turnTarget = clamp(turn / Math.max(.001, dt * 5), -1, 1);
+      p.turnBlend = p.still ? 0 : (p.turnBlend || 0) + (turnTarget - (p.turnBlend || 0)) * blendRate;
       if (role === "killer") {
+        if (!p.still && [S.PREPARATION, S.DAY].includes(s.phase)) {
+          p.idleTime = (i.forward || i.strafe) ? 0 : (p.idleTime || 0) + dt;
+          if (p.idleTime >= C.autoStillDelay && !p.poseFrom && this.canStandAt(p.x, p.z))
+            this.action("killer", "still");
+        }
         if (updateBreath(p, !!i.breath, dt, [S.PREPARATION, S.DAY].includes(s.phase)))
-          this.event("gasp", { x: p.x, y: p.y + (p.pose === "sit" ? 0.94 : ["curl", "crouch"].includes(p.pose) ? 1.02 : 1.63), z: p.z });
+          this.event("gasp", { x: p.x, y: p.y + playerBodyParts(p).find(part => part.name === "head").y, z: p.z });
       }
     }
     this.inspect(dt);

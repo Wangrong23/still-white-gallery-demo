@@ -26,8 +26,8 @@ export class SnapshotBuffer {
         continue;
       }
       const out = { ...q };
-      for (const key of ["x", "y", "z", "pitch", "step", "breathOffset", "poseMix"])
-        out[key] = p[key] + (q[key] - p[key]) * alpha;
+      for (const key of ["x", "y", "z", "pitch", "step", "breathOffset", "poseMix", "moveBlend", "turnBlend"])
+        out[key] = (p[key] || 0) + ((q[key] || 0) - (p[key] || 0)) * alpha;
       const angle = Math.atan2(Math.sin(q.yaw - p.yaw), Math.cos(q.yaw - p.yaw));
       out.yaw = p.yaw + angle * alpha;
       players[role] = out;

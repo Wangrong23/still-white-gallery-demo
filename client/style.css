@@ -432,6 +432,10 @@ h2 {
   letter-spacing: 0.04em;
 }
 #phase-card p {
+  white-space: normal;
+  width: min(560px, 86vw);
+  margin: 0 auto;
+  line-height: 1.8;
   font-size: 13px;
   letter-spacing: 0.12em;
 }

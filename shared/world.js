@@ -53,6 +53,15 @@ box("case", 18, 0.7, 5, 3.4, 1.4, 1.5, "case");
 box("screen", 0, 1.8, -13, 5, 3.6, 0.3);
 box("screen-south", 3, 1.6, 9, 3.4, 3.2, 0.25);
 
+// Room landmarks are actual solids, shared by movement, camera and bullets.
+box("shipment-tall", 21.7, 1.1, 8.5, 1.5, 2.2, 1.5, "crate");
+box("shipment-low", 21.4, .55, 11, 2.1, 1.1, 1.4, "crate");
+// A genuinely empty frame: four rails, with wall visible through its center.
+box("empty-frame-top", -23.72, 4, 10, .14, .15, 5.2, "frame");
+box("empty-frame-bottom", -23.72, 1, 10, .14, .15, 5.2, "frame");
+box("empty-frame-left", -23.72, 2.5, 7.475, .14, 2.85, .15, "frame");
+box("empty-frame-right", -23.72, 2.5, 12.525, .14, 2.85, .15, "frame");
+
 export const spots = [
   {
     id: 0,
@@ -151,10 +160,10 @@ export const spots = [
 export const statues = [
   { x: -3, y: 0.7, z: -5, yaw: 0, pose: "statue" },
   { x: 3, y: 0.7, z: -5, yaw: 0, pose: "statue" },
-  { x: 15, y: 0, z: -15, yaw: 1, pose: "hands" },
-  { x: -19, y: 0, z: 13, yaw: 0.1, pose: "arms" },
+  { x: -20, y: 0, z: -16, yaw: 0, pose: "hands" },
+  { x: -14, y: 0, z: -16, yaw: 0, pose: "arms" },
   { x: 21, y: 0, z: 14, yaw: 0, pose: "contrapposto" },
-  { x: -17, y: 0, z: -17, yaw: 0, pose: "crouch" },
+  { x: -17, y: 0, z: -16, yaw: 0, pose: "crouch" },
 ];
 export const props = [
   { type: "plant", x: -20, z: -3 },

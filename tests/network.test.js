@@ -1,3 +1,4 @@
+import { statues } from "../shared/world.js";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { WebSocket } from "ws";
@@ -131,7 +132,7 @@ test("decoys, watches, breath-delayed zero-ammo arrest replicate to both players
     await Promise.all([a.open(), b.open()]); a.send({ type: "host", role: "detective" });
     const r = await a.wait("room"); b.send({ type: "join", code: r.code }); await b.wait("start");
     const game = app.rooms.get(r.code).game;
-    game.phase("DAY"); Object.assign(game.state.players.detective, { x: -19, z: 16 });
+    game.phase("DAY"); Object.assign(game.state.players.detective, { x: statues[3].x, z: statues[3].z + 3 });
     a.send({ type: "input", input: { yaw: 0 } }); a.send({ type: "action", action: "shoot" });
     for (const c of [a, b]) {
       const m = await c.wait("state", m => m.state.destroyedStatues.includes(3));

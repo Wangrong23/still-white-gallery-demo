@@ -1,3 +1,4 @@
+import { MovementPrediction } from "./prediction.js";
 import { Gallery } from "./scene.js";
 import { Game } from "../shared/game.js";
 import { CONFIG as C, BINDINGS } from "../shared/config.js";
@@ -32,6 +33,7 @@ const settingsDialog = mountSettings({ language, storage: localStorage, onChange
   gallery.configure(next);
 } });
 const snapshots = new SnapshotBuffer();
+const prediction = new MovementPrediction();
 let game = new Game({ debug: true }),
   bot = new RehearsalBot(game),
   state = game.state,
@@ -68,11 +70,13 @@ const connection = new Connection(
     snapshots.push(s, performance.now());
     state = s;
     game.state = s;
+    prediction.reconcile(s, connection.role || role);
   },
   (m) => {
     if (m.type === "start") {
       sound.cancelAnnouncement();
       snapshots.reset();
+      prediction.reset();
       gallery.resetEffects();
       eventId = 0;
       lastPhase = "";
@@ -95,6 +99,7 @@ const connection = new Connection(
     if (m.type === "disconnected") connectionStatus("reconnectExpired", true, true);
     if (m.type === "restored") {
       snapshots.reset();
+      prediction.reset();
       if (m.started) {
         if (!started) begin("online", connection.role, false);
         view = { yaw: state.players[role].yaw, pitch: state.players[role].pitch };
@@ -317,6 +322,7 @@ function action(a) {
     game.input(role, input());
     game.action(role, a);
   } else {
+    prediction.reset();
     connection.send("input", { input: input() });
     connection.send("action", { action: a });
   }
@@ -338,7 +344,6 @@ document.addEventListener("keydown", (e) => {
   if (role === "killer" && state.players.killer.still
     && [bindings.forward, bindings.backward, bindings.left, bindings.right].includes(e.code))
     action("unstill");
-  if (e.code === bindings.still) action("still");
   if (e.code === bindings.pose && role === "killer") action("pose");
   if (e.code === bindings.mark) action("mark");
   if (e.code === bindings.flashlight && role === "detective") action("flashlight");
@@ -408,8 +413,8 @@ function toast(text) {
   $("toast").textContent = text;
   toastUntil = performance.now() + 3200;
 }
-function phaseCard(title, copy, kicker = "") {
-  phaseUntil = performance.now() + 3800;
+function phaseCard(title, copy, kicker = "", duration = 3800) {
+  phaseUntil = performance.now() + duration;
   $("phase-title").textContent = title;
   $("phase-copy").textContent = copy;
   $("phase-kicker").textContent = kicker;
@@ -449,14 +454,16 @@ function hud(now) {
   const breathHint = p.breathNeedsRelease ? t("breathRelease")
     : p.cooldown > 0 || p.breath < C.breathRestart ? t("breathMinimum")
     : !p.still ? t("breathStillFirst") : t("breathReady");
+  const breathReadout = p.cooldown > 0 ? breathLabel
+    : `${breathLabel} · ${tf("breathAmount", { seconds: Math.ceil(p.breath) })}`;
   $("resource").innerHTML =
     role === "detective"
       ? `${t("bullets")}<div class="bullets">${Array.from({ length: 4 }, (_, i) => `<span class="${i >= s.ammo ? "spent" : ""}">●</span>`).join("")}</div>`
-      : `${breathLabel} · ${p.breath.toFixed(1)} / ${C.breathDuration}s<div class="breath-bar${lowBreath ? " low" : ""}"><i style="width:${(p.breath / C.breathDuration) * 100}%"></i></div><small class="breath-status">${p.holding ? t(lowBreath ? "breathReleaseSoon" : "breathHoldingHint") : breathHint}</small>`;
+      : `${breathReadout}<div class="breath-bar${lowBreath ? " low" : ""}"><i style="width:${(p.breath / C.breathDuration) * 100}%"></i></div><small class="breath-status">${p.holding ? t(lowBreath ? "breathReleaseSoon" : "breathHoldingHint") : breathHint}</small>`;
   let place = rooms[0];
   if (p.x < -9) place = p.z < 0 ? rooms[1] : rooms[2];
   if (p.x > 9) place = p.z < 0 ? rooms[3] : rooms[4];
-  $("location").innerHTML = `${place.name}<span>${place.sub}</span>`;
+  $("location").innerHTML = `${t("gallery")}<span>${t(`room_${rooms.indexOf(place)}`)}</span>`;
   $("controls-hint").innerHTML =
     role === "detective"
       ? t("detectiveControls")
@@ -483,7 +490,7 @@ function hud(now) {
     "night",
     night ||
       s.phase === "SUNSET" ||
-      (s.phase === "GAME_OVER" && s.dayTime >= 420),
+      (s.phase === "GAME_OVER" && s.dayTime >= C.dayDuration),
   );
   const tension = role === "killer" ? game.tension() : 0;
   $("vignette").style.opacity = role === "killer" ? tension * 0.26 : 0;
@@ -497,6 +504,7 @@ function hud(now) {
           ? t("detectivePrep")
           : t("killerPrep"),
         t("compose"),
+        8000,
       );
     if (s.phase === "DAY")
       phaseCard(
@@ -550,7 +558,7 @@ function hud(now) {
   if (debug) {
     const sun = sunAt(s.dayTime);
     $("debug").textContent =
-      `LOCAL DEBUG  [F2]\nSTATE    ${s.phase}\nSUN      ${((sun.elevation * 180) / Math.PI).toFixed(1)}° / ${((sun.azimuth * 180) / Math.PI).toFixed(1)}°\nDAY      ${(420 - s.dayTime).toFixed(1)} s left\nNIGHT    ${(45 - s.nightTime).toFixed(1)} s left\nIN FOV   ${game.tension() > 0.05}\nSPOT     ${s.players.killer.spotId ?? "—"}\nBREATH   ${s.players.killer.breath.toFixed(1)}\nBOT      ${botEnabled ? "ON" : "OFF"}\nDRAW     ${gallery.renderer.info.render.calls}\nF3 +45s · F4 sunset · F6 night\nF7 ammo · F8 spots · F9 bot · Tab role`;
+      `LOCAL DEBUG  [F2]\nSTATE    ${s.phase}\nSUN      ${((sun.elevation * 180) / Math.PI).toFixed(1)}° / ${((sun.azimuth * 180) / Math.PI).toFixed(1)}°\nDAY      ${(C.dayDuration - s.dayTime).toFixed(1)} s left\nNIGHT    ${(45 - s.nightTime).toFixed(1)} s left\nIN FOV   ${game.tension() > 0.05}\nSPOT     ${s.players.killer.spotId ?? "—"}\nBREATH   ${s.players.killer.breath.toFixed(1)}\nBOT      ${botEnabled ? "ON" : "OFF"}\nDRAW     ${gallery.renderer.info.render.calls}\nF3 +45s · F4 sunset · F6 night\nF7 ammo · F8 spots · F9 bot · Tab role`;
   }
 }
 function frame(now) {
@@ -581,9 +589,11 @@ function frame(now) {
     if (mode === "online") {
       networkClock += dt;
       if (networkClock > 1 / 30) {
-        connection.send("input", {
-          input: paused ? { yaw: backYaw(), pitch: view.pitch } : input(),
-        });
+        const controls = paused ? { yaw: backYaw(), pitch: view.pitch } : input();
+        if (paused) prediction.reset();
+        else if (!prediction.sim) prediction.reconcile(state, role);
+        const seq = prediction.advance(controls);
+        connection.send("input", { input: controls, seq });
         networkClock %= 1 / 30;
       }
     }
@@ -609,7 +619,7 @@ function frame(now) {
       hudClock = 0;
     }
   }
-  const rendered = mode === "online" ? snapshots.sample(state, now) : state;
+  const rendered = mode === "online" ? prediction.sample(snapshots.sample(state, now), paused ? null : input(), networkClock) : state;
   gallery.update(rendered, role, { yaw: backYaw(), pitch: view.pitch }, dt, {
     menu: mode === "menu",
     showSpots: mode === "local" && showSpots,
