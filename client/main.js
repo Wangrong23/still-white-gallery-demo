@@ -458,8 +458,8 @@ function hud(now) {
     : `${breathLabel} · ${tf("breathAmount", { seconds: Math.ceil(p.breath) })}`;
   $("resource").innerHTML =
     role === "detective"
-      ? `${t("bullets")}<div class="bullets">${Array.from({ length: 4 }, (_, i) => `<span class="${i >= s.ammo ? "spent" : ""}">●</span>`).join("")}</div>`
-      : `${breathReadout}<div class="breath-bar${lowBreath ? " low" : ""}"><i style="width:${(p.breath / C.breathDuration) * 100}%"></i></div><small class="breath-status">${p.holding ? t(lowBreath ? "breathReleaseSoon" : "breathHoldingHint") : breathHint}</small>`;
+      ? `<span class="ammo-readout">${t("bullets")}</span><div class="bullets">${Array.from({ length: 4 }, (_, i) => `<span class="${i >= s.ammo ? "spent" : ""}">●</span>`).join("")}</div>`
+      : `<span class="breath-readout">${breathReadout}</span><div class="breath-bar${lowBreath ? " low" : ""}"><i style="width:${(p.breath / C.breathDuration) * 100}%"></i></div><small class="breath-status">${p.holding ? t(lowBreath ? "breathReleaseSoon" : "breathHoldingHint") : breathHint}</small>`;
   let place = rooms[0];
   if (p.x < -9) place = p.z < 0 ? rooms[1] : rooms[2];
   if (p.x > 9) place = p.z < 0 ? rooms[3] : rooms[4];

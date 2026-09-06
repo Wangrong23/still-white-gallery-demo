@@ -275,12 +275,23 @@ h2 {
   align-items: center;
   width: 245px;
   padding-top: 8px;
+  color: #111;
+  font-size: 15px;
+  font-weight: 600;
+  -webkit-text-stroke: 0.75px rgba(255, 255, 255, 0.95);
+  paint-order: stroke fill;
+  text-shadow:
+    -1px -1px 0 #fff,
+    1px -1px 0 #fff,
+    -1px 1px 0 #fff,
+    1px 1px 0 #fff;
 }
 .sun-track {
-  height: 1px;
+  height: 2px;
   background: currentColor;
   flex: 1;
   position: relative;
+  box-shadow: 0 0 0 1px #fff;
 }
 #sun-dot {
   position: absolute;
@@ -290,13 +301,15 @@ h2 {
   height: 9px;
   border-radius: 50%;
   background: currentColor;
+  box-shadow: 0 0 0 1px #fff;
 }
 #phase-label {
   position: absolute;
   top: 35px;
   text-align: center;
   width: 100%;
-  font-size: 10px;
+  font-size: 13px;
+  font-weight: 600;
   letter-spacing: 0.18em;
   left: 0;
 }
@@ -320,7 +333,7 @@ h2 {
   line-height: 1.8;
 }
 .bullets {
-  font-size: 23px;
+  font-size: 26px;
   letter-spacing: 0.25em;
   white-space: nowrap;
 }
@@ -354,8 +367,29 @@ h2 {
 }
 #controls-hint {
   text-align: right;
-  line-height: 1.8;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.65;
   letter-spacing: 0;
+}
+.ammo-readout,
+.bullets,
+.breath-readout,
+.breath-status,
+#controls-hint {
+  color: #111;
+  -webkit-text-stroke: 0.75px rgba(255, 255, 255, 0.95);
+  paint-order: stroke fill;
+  text-shadow:
+    -1px -1px 0 #fff,
+    1px -1px 0 #fff,
+    -1px 1px 0 #fff,
+    1px 1px 0 #fff;
+}
+.ammo-readout,
+.breath-readout {
+  font-size: 14px;
+  font-weight: 600;
 }
 #crosshair {
   position: absolute;
@@ -586,7 +620,7 @@ kbd {
   }
 }
 
-.breath-status { display: block; margin-top: 8px; line-height: 1.6; letter-spacing: 0.04em; }
+.breath-status { display: block; margin-top: 8px; font-size: 13px; font-weight: 600; line-height: 1.6; letter-spacing: 0.04em; }
 .breath-bar.low { height: 5px; background: #44444430; }
 .breath-bar.low i { background: #242424; }
 
