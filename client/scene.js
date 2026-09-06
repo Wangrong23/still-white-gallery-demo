@@ -1,11 +1,12 @@
 import * as T from "three";
+import { sculptureGeometry, decorateGallery, posterTexture } from "./noir.js";
 import { solids, spots, statues, props, rooms } from "../shared/world.js";
 import { bodyParts, playerBodyParts } from "../shared/body.js";
 import { sunAt } from "../shared/sun.js";
 
-const ink = new T.MeshToonMaterial({ color: 0x101010 });
-const white = new T.MeshToonMaterial({ color: 0xfafaf5 });
-const gray = new T.MeshToonMaterial({ color: 0xcacac4 });
+const ink = new T.MeshToonMaterial({ color: 0x101010, shadowSide: T.BackSide });
+const white = new T.MeshToonMaterial({ color: 0xf2f2f2, shadowSide: T.BackSide });
+const gray = new T.MeshToonMaterial({ color: 0xbcbcbc, shadowSide: T.BackSide });
 const lineMat = new T.LineBasicMaterial({
   color: 0x292929,
   transparent: true,
@@ -66,12 +67,12 @@ export class Gallery {
     });
     this.renderer.setPixelRatio(Math.min(devicePixelRatio, 1.6));
     this.renderer.shadowMap.enabled = true;
-    this.renderer.shadowMap.type = T.PCFShadowMap;
+    this.renderer.shadowMap.type = T.PCFSoftShadowMap;
     this.renderer.outputColorSpace = T.SRGBColorSpace;
-    this.renderer.setClearColor(0xecece7);
+    this.renderer.setClearColor(0xe6e6e6);
     this.scene = new T.Scene();
-    this.scene.background = new T.Color(0xecece7);
-    this.scene.fog = new T.Fog(0xecece7, 38, 85);
+    this.scene.background = new T.Color(0xe6e6e6);
+    this.scene.fog = new T.Fog(0xe6e6e6, 38, 85);
     this.camera = new T.PerspectiveCamera(
       72,
       innerWidth / innerHeight,
@@ -90,8 +91,8 @@ export class Gallery {
       near: 0.5,
       far: 130,
     });
-    this.sun.shadow.bias = -0.00055;
-    this.sun.shadow.normalBias = 0.055;
+    this.sun.shadow.bias = -0.0015;
+    this.sun.shadow.normalBias = 0;
     this.scene.add(this.sun, this.sun.target);
     this.ambient = new T.AmbientLight(0xffffff, 0.48);
     this.scene.add(this.ambient);
@@ -115,7 +116,7 @@ export class Gallery {
     };
     Object.values(this.actors).forEach((a) => this.scene.add(a));
     this.posePreview = this.makeActor(false);
-    const previewMaterial = new T.MeshBasicMaterial({ color: 0x317b76,
+    const previewMaterial = new T.MeshBasicMaterial({ color: 0x555555,
       transparent: true, opacity: .24, depthWrite: false });
     this.posePreview.traverse((o) => {
       if (o.isMesh) { o.material = previewMaterial; o.castShadow = false; o.receiveShadow = false; }
@@ -162,6 +163,7 @@ export class Gallery {
         }
       }
     }
+    decorateGallery(this.world, solids, ink);
     // Ink joints and scattered fine hatch strokes replace glossy surface detail.
     const points = [];
     for (let x = -24; x <= 24; x += 3) {
@@ -329,18 +331,11 @@ export class Gallery {
     const paper = cube(2.5, 2.15, 0.02, white, false);
     paper.position.z = 0.05;
     g.add(paper);
-    const lines = [];
-    for (let j = 0; j < 12; j++) {
-      const x0 = Math.sin(j * 1.7 + z) * 0.75,
-        y0 = Math.cos(j * 2.1) * 0.75;
-      lines.push(
-        new T.Vector3(x0, y0, 0.08),
-        new T.Vector3(Math.sin(j * 2.3) * 0.8, Math.cos(j + z) * 0.8, 0.08),
-      );
-    }
-    g.add(
-      new T.LineSegments(new T.BufferGeometry().setFromPoints(lines), lineMat),
-    );
+    const print = new T.Mesh(new T.PlaneGeometry(2.36, 2.02),
+      new T.MeshToonMaterial({ map: posterTexture(Math.abs(z)), shadowSide: T.BackSide }));
+    print.position.z = .065;
+    print.receiveShadow = true;
+    g.add(print);
     this.world.add(g);
   }
   makeProp(p) {
@@ -409,23 +404,35 @@ export class Gallery {
     a.userData.detective = detective;
     a.userData.parts = [];
     for (const part of bodyParts("stand", 0, 0, detective)) {
-      const m = part.round
-        ? new T.Mesh(
-            new T.SphereGeometry(0.5, 12, 10),
-            detective ? white : white,
-          )
-        : cube(1, 1, 1, detective ? ink : white, false);
+      const key = part.name === "hat" && part.h > .1 ? "crown" : part.name;
+      const m = new T.Mesh(sculptureGeometry[key], detective && part.name !== "head" ? ink : white);
       m.castShadow = true;
       m.receiveShadow = true;
       a.add(m);
       a.userData.parts.push(m);
+      if (detective && part.name === "torso") {
+        for (const side of [-1, 1]) {
+          const lapel = cube(.16, .58, .04, gray, false);
+          lapel.position.set(side * .18, .13, -.48);
+          lapel.rotation.z = side * -.3;
+          m.add(lapel);
+        }
+      }
+      if (detective && part.name === "coat") {
+        const belt = cube(.76,.065,.77,gray,false);
+        belt.position.y = .16; m.add(belt);
+        for (const side of [-1,1]) for (const y of [-.18,.02]) {
+          const button = cube(.025,.025,.035,gray,false);
+          button.position.set(side*.17,y,-.44); m.add(button);
+        }
+      }
     }
     const face = new T.Group();
     a.add(face);
     a.userData.face = face;
     for (const side of [-1, 1]) {
-      const eye = new T.Mesh(new T.SphereGeometry(0.018, 6, 4), ink);
-      eye.position.set(side * 0.064, 0.035, -0.142);
+      const eye = new T.Mesh(new T.BoxGeometry(0.035, 0.006, 0.008), ink);
+      eye.position.set(side * 0.064, 0.035, -0.138);
       face.add(eye);
     }
     const mouth = cube(0.076, 0.015, 0.015, ink, false);
@@ -446,9 +453,9 @@ export class Gallery {
     });
     const head = parts.find((p) => p.name === "head");
     a.userData.face.position.y = head.y;
-    a.userData.face.children[0].scale.y = p.still ? 0.12 : 1;
-    a.userData.face.children[1].scale.y = p.still ? 0.12 : 1;
-    a.userData.mouth.visible = !p.still;
+    a.userData.face.children[0].scale.y = 1;
+    a.userData.face.children[1].scale.y = 1;
+    a.userData.mouth.visible = false;
   }
   makeGun() {
     const g = new T.Group();
@@ -462,12 +469,18 @@ export class Gallery {
     const sight = cube(0.016, 0.027, 0.025, ink);
     sight.position.set(0, 0.04, -0.31);
     g.add(sight);
+    const cylinder = new T.Mesh(new T.CylinderGeometry(.047,.047,.095,12), gray);
+    cylinder.rotation.x = Math.PI / 2;
+    cylinder.position.set(0, -.012, -.025);
+    g.add(cylinder);
+    const hammer = cube(.018,.045,.025,gray,false);
+    hammer.position.set(0,.035,.035); g.add(hammer);
     g.position.set(0.27, -0.24, -0.4);
     g.traverse((o) => {
       if (o.isMesh) {
         o.castShadow = false;
         o.receiveShadow = false;
-        o.material = ink;
+
       }
     });
     return g;
@@ -506,7 +519,7 @@ export class Gallery {
       const s = spots[id];
       const m = data[id];
       const alert = m?.triggeredAt != null;
-      const l = label(alert ? `! ${id + 1} !` : `${id + 1} / ${Math.max(0, Math.ceil(m.expiresAt - elapsed))}s`, 1.2, 0.24, alert ? "#d85417" : "#191919");
+      const l = label(alert ? `! ${id + 1} !` : `${id + 1} / ${Math.max(0, Math.ceil(m.expiresAt - elapsed))}s`, 1.2, 0.24, alert ? "#ffffff" : "#191919", alert ? "#191919" : null);
       l.position.set(s.x, s.y + 2.2, s.z);
       this.markerGroup.add(l);
     });
@@ -527,7 +540,7 @@ export class Gallery {
     this.sun.position.set(sun.x, sun.y, sun.z);
     this.sun.intensity = night || sunset ? 0 : 3.2;
     this.ambient.intensity = night ? 0.028 : sunset ? 0.006 : 0.48;
-    this.scene.background.set(night || sunset ? 0x030303 : 0xecece7);
+    this.scene.background.set(night || sunset ? 0x030303 : 0xe6e6e6);
     this.scene.fog.color.copy(this.scene.background);
     this.gate.visible = state.phase === "PREPARATION";
     Object.entries(this.actors).forEach(([r, a]) => {

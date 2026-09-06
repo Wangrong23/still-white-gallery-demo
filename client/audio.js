@@ -5,6 +5,7 @@ export class Sound {
     this.ctx = null;
     this.muted = false;
     this.nextHeart = 0;
+    this.samples = new Map();
   }
   start() {
     if (!this.ctx) {
@@ -12,6 +13,13 @@ export class Sound {
       this.master = this.ctx.createGain();
       this.master.gain.value = 0.3;
       this.master.connect(this.ctx.destination);
+      for (const name of ["heel", "revolver", "plaster", "bell"]) {
+        fetch(`/client/assets/${name}.wav`)
+          .then((r) => { if (!r.ok) throw new Error(name); return r.arrayBuffer(); })
+          .then((data) => this.ctx.decodeAudioData(data))
+          .then((buffer) => this.samples.set(name, buffer))
+          .catch(() => { /* Procedural fallback remains available offline. */ });
+      }
       const size = this.ctx.sampleRate * 2,
         buffer = this.ctx.createBuffer(1, size, this.ctx.sampleRate),
         data = buffer.getChannelData(0);
@@ -29,6 +37,20 @@ export class Sound {
       source.start();
     }
     this.ctx.resume();
+  }
+  sample(name, volume, pan = 0, rate = 1) {
+    if (!this.ctx || this.muted) return false;
+    const buffer = this.samples.get(name);
+    if (!buffer) return false;
+    const source = this.ctx.createBufferSource(), gain = this.ctx.createGain(), p = this.ctx.createStereoPanner();
+    source.buffer = buffer;
+    source.playbackRate.value = rate;
+    gain.gain.value = volume;
+    p.pan.value = pan;
+    source.connect(gain).connect(p).connect(this.master);
+    source.onended = () => { source.disconnect(); gain.disconnect(); p.disconnect(); };
+    source.start();
+    return true;
   }
   tone(freq, duration, volume = 0.15, type = "sine", pan = 0, delay = 0) {
     if (!this.ctx || this.muted) return;
@@ -89,6 +111,7 @@ export class Sound {
             ),
           );
     if (e.type === "step" && vol > 0) {
+      if (this.sample("heel", vol * (e.role === "detective" ? .28 : .19), pan, .94 + Math.random() * .12)) return;
       this.noise(0.07, vol * (e.role === "detective" ? 0.21 : 0.15), pan, 1200);
       this.tone(
         e.role === "detective" ? 85 : 125,
@@ -99,6 +122,7 @@ export class Sound {
       );
     }
     if (e.type === "shot") {
+      if (this.sample("revolver", .85, pan)) return;
       this.noise(0.28, 0.9, pan, 7000);
       this.tone(72, 0.3, 0.5);
       this.noise(0.07, 0.25, -pan, 2500);
@@ -113,16 +137,17 @@ export class Sound {
       this.tone(880, 0.13, 0.22);
       this.tone(660, 0.2, 0.18, "sine", 0, 0.16);
     }
-    if (e.type === "shatter") this.noise(0.4, vol * 0.5, pan, 4800);
+    if (e.type === "shatter" && !this.sample("plaster", vol * .5, pan)) this.noise(0.4, vol * 0.5, pan, 4800);
     if (e.type === "phase" && e.phase === "SUNSET") {
-      for (let i = 0; i < 3; i++)
+      if (!this.sample("bell", .4)) for (let i = 0; i < 3; i++)
         this.tone(420 - i * 65, 1.2, 0.3, "sine", 0, i * 0.45);
       setTimeout(() => this.noise(0.12, 0.3, 0, 4000), 900);
-      if ("speechSynthesis" in window) {
+      if (!this.muted && "speechSynthesis" in window) {
+        const chinese = localStorage.getItem("still.language") !== "en";
         const u = new SpeechSynthesisUtterance(
-          "The gallery is now closed. Please proceed to the exit.",
+          chinese ? "展馆即将闭馆。请前往出口。" : "The gallery is now closed. Please proceed to the exit.",
         );
-        u.lang = "en-US";
+        u.lang = chinese ? "zh-CN" : "en-US";
         u.rate = 0.8;
         u.pitch = 0.65;
         u.volume = 0.35;

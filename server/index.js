@@ -18,6 +18,7 @@ export function createApp({
     ".json": "application/json",
     ".png": "image/png",
     ".svg": "image/svg+xml",
+    ".wav": "audio/wav",
   };
   const server = createServer(async (req, res) => {
     try {
