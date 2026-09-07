@@ -45,6 +45,7 @@ const player = (role) => ({
   turnBlend: 0,
   inspectTarget: null,
   inspectProgress: 0,
+  death: null,
 });
 export class Game {
   constructor({ debug = false } = {}) {
@@ -90,6 +91,7 @@ export class Game {
     this.phase(S.GAME_OVER);
   }
   input(role, data) {
+    if (this.state.phase === S.GAME_OVER) return;
     if (!this.state.players[role]) return;
     this.inputs[role] = {
       forward: clamp(Number(data.forward) || 0, -1, 1),
@@ -261,7 +263,12 @@ export class Game {
           z: o.z + d.z * travel,
         } : null,
       });
-      if (detected) this.win("DETECTED");
+      if (detected) {
+        this.kill("killer", "shot", {
+          x: o.x + d.x * travel, y: o.y + d.y * travel, z: o.z + d.z * travel,
+        }, d);
+        this.win("DETECTED");
+      }
       else if (s.phase === S.DAY) {
         s.dayTime = Math.min(C.dayDuration, s.dayTime + C.wrongShotPenalty);
         this.event("penalty");
@@ -277,9 +284,10 @@ export class Game {
         ((d.x - p.x) * dir.x + (d.z - p.z) * dir.z) / Math.max(len, 0.01) >
           0.25 &&
         this.lineOfSight(p, d)
-      )
+      ) {
+        this.kill("detective", "attack", { x: d.x, y: 1.25, z: d.z }, dir);
         this.win("FOUND YOU");
-      else this.event("swipe");
+      } else this.event("swipe");
     }
     if (action === "flashlight" && role === "detective" && s.phase === S.NIGHT)
       p.flashlight = !p.flashlight;
@@ -322,6 +330,17 @@ export class Game {
         this.event("mark", { placed: i < 0, spotId: chosen.id });
       }
     }
+  }
+  kill(role, cause, point, direction) {
+    const p = this.state.players[role];
+    if (p.death) return;
+    // Keep the impact and original pose in snapshots, including reconnects.
+    p.death = { cause, point, direction, parts: playerBodyParts(p) };
+    p.moving = false;
+    p.holding = false;
+    p.stillTransition = null;
+    p.inspectTarget = null;
+    p.inspectProgress = 0;
   }
   debugAction(action) {
     if (!this.debug) return;

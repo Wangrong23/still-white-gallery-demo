@@ -59,9 +59,10 @@ test("empty rays leave no impact and walls receive surface-bound impacts", () =>
   g.input("detective", { pitch: 1.3 }); g.action("detective", "shoot");
   let shot = g.state.events.findLast(e => e.type === "shot");
   assert.equal(shot.point, null); assert.equal(shot.surface, null);
-  advance(g, .7); g.input("detective", { yaw: Math.PI }); g.action("detective", "shoot");
+  advance(g, .7); g.state.players.detective.x = -2.3;
+  g.input("detective", { yaw: Math.PI }); g.action("detective", "shoot");
   shot = g.state.events.findLast(e => e.type === "shot");
-  assert.equal(shot.surface, "entry-back");
+  assert.equal(shot.surface, "entry-back-left");
   assert.ok(Math.abs(shot.point.z - 23.85) < .001);
 });
 

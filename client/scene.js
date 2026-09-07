@@ -5,6 +5,7 @@ import { solids, spots, statues, props, rooms } from "../shared/world.js";
 import { bodyParts, playerBodyParts } from "../shared/body.js";
 import { sunAt } from "../shared/sun.js";
 import { t } from "./i18n.js";
+import { DeathEffects } from "./death.js";
 
 // Three's default Toon ramp illuminates even negative N·L at 70% strength.
 // An unlit wall and an occluded figure must instead share a black endpoint.
@@ -140,6 +141,7 @@ export class Gallery {
       killer: this.makeActor(false),
     };
     Object.values(this.actors).forEach((a) => this.scene.add(a));
+    this.deaths = new DeathEffects(this.scene);
     this.posePreview = this.makeActor(false);
     const previewMaterial = new T.MeshBasicMaterial({ color: 0x555555,
       transparent: true, opacity: .24, depthWrite: false });
@@ -498,7 +500,7 @@ export class Gallery {
   }
   poseActor(a, p, time) {
     a.position.set(p.x, p.y || 0, p.z);
-    a.rotation.y = p.yaw;
+    a.rotation.set(0, p.yaw, 0);
     const parts = playerBodyParts({ ...p, role: a.userData.detective ? "detective" : "killer" });
     parts.forEach((part, i) => {
       const m = a.userData.parts[i];
@@ -616,7 +618,9 @@ export class Gallery {
       this.poseActor(a, state.players[r], state.elapsed);
       a.visible = true;
     });
+    this.deaths.update(state.players, this.actors, dt, menu);
     const p = state.players[role];
+    const fallen = Object.values(state.players).find(player => player.death);
     this.posePreview.visible = !menu && role === "killer" && ["PREPARATION", "DAY"].includes(state.phase)
       && !!posePreview && (!p.still || p.spotId === null);
     if (this.posePreview.visible) this.poseActor(this.posePreview,
@@ -646,7 +650,7 @@ export class Gallery {
         0,
       );
       this.gun.visible = false;
-    } else if (role === "detective") {
+    } else if (role === "detective" && !fallen) {
       this.camera.position.set(
         p.x,
         1.65,
@@ -657,13 +661,20 @@ export class Gallery {
       this.gun.visible = true;
       this.gun.position.set(aim ? 0.035 : 0.27, aim ? -0.18 : -0.24, -0.4);
     } else {
+      const followed = fallen || p;
       const target = new T.Vector3(
-        p.x,
-        (p.y || 0) + (p.pose === "sit" ? .65 : 1.4),
-        p.z,
+        followed.x + (fallen ? fallen.death.direction.x * .7 : 0),
+        fallen ? .65 : (p.y || 0) + (p.pose === "sit" ? .65 : 1.4),
+        followed.z + (fallen ? fallen.death.direction.z * .7 : 0),
       );
       let distance = 3.05;
       const back = dir.clone().negate();
+      if (fallen) {
+        // A side view keeps the attacker from obscuring the falling victim.
+        const fall = fallen.death.direction;
+        back.set(-fall.z * .85 - fall.x * .4, .75,
+          fall.x * .85 - fall.z * .4).normalize();
+      }
       this.world.updateMatrixWorld();
       this.cameraRay.set(target, back);
       this.cameraRay.near = 0.1;
@@ -674,10 +685,10 @@ export class Gallery {
       this.cameraDistance = distance < this.cameraDistance ? distance
         : this.cameraDistance + (distance - this.cameraDistance) * (1 - Math.exp(-dt * 10));
       this.camera.position.copy(target).addScaledVector(back, this.cameraDistance);
-      this.camera.lookAt(target.clone().addScaledVector(dir, 8));
+      this.camera.lookAt(fallen ? target : target.clone().addScaledVector(dir, 8));
       this.gun.visible = false;
     }
-    const fov = aim && role === "detective" ? 49 : 72;
+    const fov = aim && role === "detective" && !fallen ? 49 : 72;
     this.camera.fov += (fov - this.camera.fov) * Math.min(1, dt * 12);
     this.camera.updateProjectionMatrix();
     this.flash.visible = night && state.players.detective.flashlight;

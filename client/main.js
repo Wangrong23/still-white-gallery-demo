@@ -527,7 +527,8 @@ function hud(now) {
     if (s.phase === "GAME_OVER") {
       document.exitPointerLock();
       $("pause").hidden = true;
-      $("results").hidden = false;
+      $("results").hidden = true;
+      phaseUntil = 0;
       const result = s.result;
       $("result-title").textContent =
         result === "KILLER ESCAPED" ? t("escaped") : result === "FOUND YOU"
@@ -548,6 +549,10 @@ function hud(now) {
               ? t("resultSurvived")
               : t("resultDetected");
     }
+  }
+  if (s.phase === "GAME_OVER") {
+    const fatal = Object.values(s.players).some(p => p.death);
+    $("results").hidden = fatal && !gallery.deaths.ready;
   }
   $("phase-card").style.opacity = now < phaseUntil ? 1 : 0;
   $("toast").style.opacity = now < toastUntil ? 1 : 0;
