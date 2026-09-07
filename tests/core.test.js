@@ -159,3 +159,14 @@ test("a full default round terminates through all five phases", () => {
   assert.equal(g.state.result, "SURVIVED");
   assert.equal(g.state.ammo, 4);
 });
+
+
+test("night offers killer escape while detective can still shoot to arrest", () => {
+  const g=new Game();g.state.players.detective.z=10;g.phase("NIGHT");
+  Object.assign(g.state.players.killer,{x:0,z:22.5});g.tick(.05);
+  assert.equal(g.state.result,"KILLER ESCAPED");
+  const h=new Game();h.phase("NIGHT");
+  Object.assign(h.state.players.detective,{x:0,z:1,yaw:0,pitch:0});
+  Object.assign(h.state.players.killer,{x:0,z:-2});h.action("detective","shoot");
+  assert.equal(h.state.phase,"GAME_OVER");assert.notEqual(h.state.result,"FOUND YOU");
+});

@@ -125,7 +125,7 @@ test("two-player rematch resets all authoritative state and serves assets safely
   }
 });
 
-test("decoys, watches, breath-delayed zero-ammo arrest replicate to both players", async () => {
+test("decoys and breath-delayed zero-ammo arrest replicate to both players", async () => {
   const app = createApp({ port: 0, host: "127.0.0.1" }), addr = await app.start();
   try {
     const a = client(`ws://127.0.0.1:${addr.port}/ws`), b = client(`ws://127.0.0.1:${addr.port}/ws`);
@@ -137,12 +137,6 @@ test("decoys, watches, breath-delayed zero-ammo arrest replicate to both players
     for (const c of [a, b]) {
       const m = await c.wait("state", m => m.state.destroyedStatues.includes(3));
       assert.equal(m.state.ammo, 3);
-    }
-    Object.assign(game.state.players.detective, { x: 0, z: -2 });
-    a.send({ type: "action", action: "mark" });
-    for (const c of [a, b]) {
-      const m = await c.wait("state", m => m.state.marks.includes(0));
-      assert.ok(m.state.markData[0].expiresAt > m.state.elapsed);
     }
     game.state.ammo = 0;
     Object.assign(game.state.players.detective, { x: 0, z: 0 });

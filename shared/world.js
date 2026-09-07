@@ -14,7 +14,9 @@ box("south-east", 13.5, 2.6, 20, 21, 5.2, 0.4);
 // A gated entrance vestibule makes the night route a real destination.
 box("entry-left", -3, 2, 22, 0.35, 4, 4);
 box("entry-right", 3, 2, 22, 0.35, 4, 4);
-box("entry-back", 0, 2, 24, 6, 4, 0.3);
+// Open south doorway, rather than an EXIT label on a closed end wall.
+box("entry-back-left", -2.3, 2, 24, 1.4, 4, 0.3);
+box("entry-back-right", 2.3, 2, 24, 1.4, 4, 0.3);
 box("entry-floor", 0, -0.15, 22, 6, 0.3, 4, "floor");
 // Interior walls have wide, navigable doorways.
 for (const x of [-9, 9]) {

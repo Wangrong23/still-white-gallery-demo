@@ -183,7 +183,7 @@ export function createApp({
           if (Number.isSafeInteger(m.seq) && m.seq > 0)
             ws.pendingInputSeq = Math.max(ws.pendingInputSeq || 0, m.seq);
         }
-        if (m.type === "action" && room.active)
+        if (m.type === "action" && room.active && m.action !== "mark")
           room.game.action(ws.role, m.action);
         if (m.type === "rematch" && room.active && room.game.state.phase === "GAME_OVER") {
           room.ready.add(ws.role);

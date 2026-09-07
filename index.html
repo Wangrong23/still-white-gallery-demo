@@ -38,9 +38,7 @@
       <div class="title">
         <p class="eyebrow">白色展馆</p>
         <h1>别动</h1>
-        <div class="title-bottom">
-          <span class="chinese">别动</span
-          ><span>一人追猎。<br />一人融入展厅。</span>
+        <div class="title-bottom"><span>有人在看。<br />有人不该在这里。</span>
         </div>
       </div>
       <section class="play-menu" aria-label="开始游戏">
@@ -52,33 +50,28 @@
             凶手
           </button>
         </div>
-        <button id="local" class="primary">
-          进入展馆 <span>单人演练 ↗</span>
-        </button>
-        <div class="network-row">
-          <button id="host">创建房间 <small>双人游戏</small></button
-          ><button id="join">加入房间 <small>双人游戏</small></button>
+        <div class="online-actions">
+          <button id="host" class="primary">创建房间 <span>双人在线 ↗</span></button>
+          <form id="join-form" class="join-card">
+            <div id="join">加入房间</div>
+            <label for="room-code">房间码</label>
+            <div class="join-input">
+              <input id="room-code" maxlength="6" minlength="6" pattern="[A-Fa-f0-9]{6}"
+                required placeholder="ABC123" autocomplete="off" spellcheck="false" />
+              <button id="connect" type="submit">进入 ↗</button>
+            </div>
+          </form>
         </div>
-        <div id="join-form" hidden>
-          <label for="room-code">房间码</label>
-          <div class="join-input">
-            <input
-              id="room-code"
-              maxlength="6"
-              placeholder="ABC123"
-              autocomplete="off"
-            /><button id="connect">进入 ↗</button>
-          </div>
-        </div>
+        <button id="local" class="solo-action">单人演练 <span>熟悉展馆与操作 ↗</span></button>
         <p id="network-status" role="status"></p>
         <button id="network-cancel" hidden>离开房间</button>
         <p class="menu-note">
-          键盘和鼠标 · 建议佩戴耳机 · 每局约 7 分钟<br />单人演练可切换角色；双人模式由两位玩家控制。
+          键盘和鼠标 · 建议佩戴耳机 · 白昼 5 分钟<br />单人演练可切换角色；双人模式由两位玩家控制。
         </p>
       </section>
       <footer>
         <span id="study-copy">请勿触碰展品。</span
-        ><span>17:53 ───────── 18:00</span
+        ><span>17:55 ───────── 18:00</span
         ><button id="settings-button">设置</button><button id="help-button">操作说明 ?</button>
       </footer>
     </main>
@@ -89,9 +82,9 @@
           <h2 id="objective">找到他。</h2>
         </div>
         <div id="sun-clock">
-          <span>☀</span>
+          <span id="clock-start" aria-hidden="true">☀</span>
           <div class="sun-track"><i id="sun-dot"></i></div>
-          <span>◐</span><small id="phase-label">日落之前</small>
+          <span id="clock-end" aria-hidden="true">◐</span><small id="phase-label">日落之前</small>
         </div>
         <button id="pause-button" aria-label="暂停菜单">Ⅱ</button>
       </header>

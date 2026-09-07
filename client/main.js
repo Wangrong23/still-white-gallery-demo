@@ -162,11 +162,8 @@ $("local").onclick = () => {
   state = game.state;
   begin("local", chosenRole);
 };
-$("join").onclick = () => {
-  $("join-form").hidden = !$("join-form").hidden;
-  $("room-code").focus();
-};
 async function connect(mode) {
+  if (mode === "join" && $("connect").disabled) return;
   $("network-status").textContent = t("connecting");
   $("host").disabled = true;
   $("connect").disabled = true;
@@ -175,7 +172,7 @@ async function connect(mode) {
     const m = await connection.connect(
       mode,
       chosenRole,
-      $("room-code").value.trim(),
+      $("room-code").value.trim().toUpperCase(),
     );
     role = m.role;
     waiting = true;
@@ -192,9 +189,9 @@ async function connect(mode) {
   }
 }
 $("host").onclick = () => connect("host");
-$("connect").onclick = () => connect("join");
-$("room-code").onkeydown = (e) => {
-  if (e.key === "Enter") connect("join");
+$("join-form").onsubmit = (e) => {
+  e.preventDefault();
+  connect("join");
 };
 function lock() {
   if (document.pointerLockElement !== canvas)
@@ -345,7 +342,7 @@ document.addEventListener("keydown", (e) => {
     && [bindings.forward, bindings.backward, bindings.left, bindings.right].includes(e.code))
     action("unstill");
   if (e.code === bindings.pose && role === "killer") action("pose");
-  if (e.code === bindings.mark) action("mark");
+
   if (e.code === bindings.flashlight && role === "detective") action("flashlight");
   if (mode === "local") {
     if (e.code === "Tab") {
@@ -428,21 +425,23 @@ function hud(now) {
   $("objective").textContent =
     role === "detective"
       ? night
-        ? t("run")
+        ? t("nightDetective")
         : t("findHim")
       : night
-        ? t("findHim")
+        ? t("nightKiller")
         : p.still
           ? t("still")
           : t("dontMove");
-  $("sun-dot").style.left = `${Math.min(1, s.dayTime / C.dayDuration) * 100}%`;
+  $("clock-start").textContent = night ? "◷" : "☀";
+  $("clock-end").textContent = night ? "◆" : "◐";
+  $("sun-dot").style.left = `${Math.min(1, night ? s.nightTime / C.nightDuration : s.dayTime / C.dayDuration) * 100}%`;
   $("phase-label").textContent =
     s.phase === "PREPARATION"
       ? tf("doorsOpen", {
           seconds: Math.ceil(C.preparationDuration - s.phaseTime),
         })
       : night
-        ? t("afterSunset")
+        ? (C.nightDuration-s.nightTime <= 10 ? tf("backupSeconds", {seconds: Math.max(0,Math.ceil(C.nightDuration-s.nightTime))}) : t("backupApproaching"))
         : s.phase === "SUNSET"
           ? t("closing")
           : t("beforeSunset");
@@ -451,7 +450,11 @@ function hud(now) {
     : p.holding ? t(lowBreath ? "breathLow" : "holding")
     : p.breathDelay > 0 ? t("breathSettling")
     : p.breath < C.breathDuration ? t("recovering") : t("breath");
-  const breathHint = p.breathNeedsRelease ? t("breathRelease")
+  const nearbyBreathRisk = role === "killer" && s.phase === "DAY" && p.still && !p.holding
+    && !p.breathNeedsRelease && p.cooldown <= 0 && p.breath >= C.breathRestart
+    && Math.hypot(p.x-s.players.detective.x,p.z-s.players.detective.z) < 6
+    && game.lineOfSight(s.players.detective,p) && game.tension() > .2;
+  const breathHint = nearbyBreathRisk ? t("breathPrompt") : p.breathNeedsRelease ? t("breathRelease")
     : p.cooldown > 0 || p.breath < C.breathRestart ? t("breathMinimum")
     : !p.still ? t("breathStillFirst") : t("breathReady");
   const breathReadout = p.cooldown > 0 ? breathLabel
@@ -459,15 +462,14 @@ function hud(now) {
   $("resource").innerHTML =
     role === "detective"
       ? `<span class="ammo-readout">${t("bullets")}</span><div class="bullets">${Array.from({ length: 4 }, (_, i) => `<span class="${i >= s.ammo ? "spent" : ""}">●</span>`).join("")}</div>`
-      : `<span class="breath-readout">${breathReadout}</span><div class="breath-bar${lowBreath ? " low" : ""}"><i style="width:${(p.breath / C.breathDuration) * 100}%"></i></div><small class="breath-status">${p.holding ? t(lowBreath ? "breathReleaseSoon" : "breathHoldingHint") : breathHint}</small>`;
+      : `<span class="breath-readout">${breathReadout}</span><div class="breath-bar${lowBreath ? " low" : ""}"><i style="width:${(p.breath / C.breathDuration) * 100}%"></i></div><small class="breath-status">${p.holding ? t(lowBreath ? "breathReleaseSoon" : "breathHoldingHint") : p.breathNeedsRelease || p.cooldown > 0 ? breathHint : ""}</small>`;
   let place = rooms[0];
   if (p.x < -9) place = p.z < 0 ? rooms[1] : rooms[2];
   if (p.x > 9) place = p.z < 0 ? rooms[3] : rooms[4];
   $("location").innerHTML = `${t("gallery")}<span>${t(`room_${rooms.indexOf(place)}`)}</span>`;
-  $("controls-hint").innerHTML =
-    role === "detective"
-      ? t("detectiveControls")
-      : t("killerControls");
+  $("controls-hint").innerHTML = s.phase === "PREPARATION"
+    ? t(role === "detective" ? "detectiveControls" : "killerControls") : "";
+  $("resource").hidden = night && role === "killer";
   const nearest = role === "killer" ? game.nearestSpot() : null;
   $("interaction").textContent =
     role === "detective" && s.phase === "DAY"
@@ -476,11 +478,11 @@ function hud(now) {
         : game.inspectionTarget() ? t("inspectHint") : s.ammo === 0 ? t("noAmmo") : ""
       : role === "killer" && !night
       ? s.players.detective.inspectTarget === "killer"
-        ? t("inspectionPressure")
-        : nearest && (!p.still || p.spotId === null)
+        ? (nearbyBreathRisk ? t("breathPrompt") : t("inspectionPressure"))
+        : nearbyBreathRisk ? t("breathPrompt") : nearest && (!p.still || p.spotId === null)
           ? tf("enterPose", { pose: t(`pose_${nearest.pose}`) })
           : ""
-      : night && role === "killer"
+      : night && role === "killer" && Math.hypot(p.x-s.players.detective.x,p.z-s.players.detective.z) < C.attackRange && game.lineOfSight(p,s.players.detective)
         ? t("attack")
         : "";
   $("crosshair").style.opacity = role === "detective" ? 1 : 0.2;
@@ -516,7 +518,7 @@ function hud(now) {
       phaseCard(t("closingTime"), t("galleryClosed"), "18:00");
     if (s.phase === "NIGHT")
       phaseCard(
-        role === "detective" ? t("run") : t("yourTurn"),
+        role === "detective" ? t("nightDetective") : t("nightKiller"),
         role === "detective"
           ? t("findExit")
           : t("huntTime"),
@@ -528,7 +530,7 @@ function hud(now) {
       $("results").hidden = false;
       const result = s.result;
       $("result-title").textContent =
-        result === "FOUND YOU"
+        result === "KILLER ESCAPED" ? t("escaped") : result === "FOUND YOU"
           ? t("foundYou")
           : result === "ESCAPED"
             ? t("escaped")
@@ -536,9 +538,9 @@ function hud(now) {
               ? t("survived")
               : t("detected");
       $("winner").textContent =
-        t(result === "FOUND YOU" ? "killerWins" : "detectiveWins");
+        t(["FOUND YOU", "KILLER ESCAPED"].includes(result) ? "killerWins" : "detectiveWins");
       $("result-copy").textContent =
-        result === "FOUND YOU"
+        result === "KILLER ESCAPED" ? t("resultKillerEscaped") : result === "FOUND YOU"
           ? t("resultFound")
           : result === "ESCAPED"
             ? t("resultEscaped")
@@ -551,7 +553,7 @@ function hud(now) {
   $("toast").style.opacity = now < toastUntil ? 1 : 0;
   // Actual blackout lasts 0.4 seconds, within a longer closing announcement.
   $("blackout").style.opacity =
-    s.phase === "SUNSET" && s.phaseTime > 0.65 && s.phaseTime < 1.05 ? 1 : 0;
+    0;
   $("debug").hidden = !debug || mode !== "local";
   if (debug) {
     const sun = sunAt(s.dayTime);

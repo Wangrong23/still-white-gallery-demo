@@ -498,6 +498,7 @@ export class Game {
       s.nightTime += dt;
       if (distance(s.players.detective, exit) < exit.radius)
         this.win("ESCAPED");
+      else if (distance(s.players.killer, exit) < exit.radius) this.win("KILLER ESCAPED");
       else if (s.nightTime >= C.nightDuration) this.win("SURVIVED");
     }
     for (const role of ["detective", "killer"]) {

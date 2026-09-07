@@ -16,7 +16,7 @@ const white = new T.MeshToonMaterial({ color: 0xf2f2f2, gradientMap: shadowRamp,
 const gray = new T.MeshToonMaterial({ color: 0xbcbcbc, gradientMap: shadowRamp, shadowSide: T.BackSide });
 // A common linear-light floor lifts only dark surfaces. Unlike ambient light,
 // it does not multiply each object's albedo and reveal the figure in shelter.
-const shadowFloor = { value: 0.028 };
+const shadowFloor = { value: 0.045 };
 function softenShadows(material) {
   material.onBeforeCompile = (shader) => {
     shader.uniforms.shadowFloor = shadowFloor;
@@ -298,6 +298,15 @@ export class Gallery {
     entry.position.set(0, 2.8, 23.75);
     this.world.add(entry);
     this.exitSign = entry;
+    this.exitLamp = new T.SpotLight(0xffffff, 0, 13, .65, .7, 1.5);
+    this.exitLamp.position.set(0, 3, 24.4);
+    this.exitLamp.target.position.set(0, 0, 18);
+    this.exitLamp.castShadow = true;
+    this.exitLamp.shadow.mapSize.set(512,512);
+    this.scene.add(this.exitLamp, this.exitLamp.target);
+    const threshold = cube(4.5, .10, .12, new T.MeshBasicMaterial({color:0xbcbcbc}), false);
+    threshold.position.set(0,2.9,23.7);this.world.add(threshold);
+    this.exitGlow = threshold;
     const exitFloor = label("EXIT   ↓", 3, 0.5);
     exitFloor.rotation.x = -Math.PI / 2;
     exitFloor.position.set(0, 0.02, 21);
@@ -305,7 +314,7 @@ export class Gallery {
     this.gate = cube(5.7, 3.7, 0.1, ink);
     this.gate.position.set(0, 1.85, 20.1);
     this.world.add(this.gate);
-    const gateLabel = label("CLOSED UNTIL 17:53", 4, 0.5, "#eeeeee");
+    const gateLabel = label("CLOSED UNTIL 17:55", 4, 0.5, "#eeeeee");
     gateLabel.position.set(0, 0.5, 0.06);
     this.gate.add(gateLabel);
     // Printed exhibit plaques make empty spots read as intentional composition.
@@ -584,10 +593,23 @@ export class Gallery {
     const sunset = state.phase === "SUNSET";
     const sun = sunAt(state.dayTime);
     this.sun.position.set(sun.x, sun.y, sun.z);
-    this.sun.intensity = night || sunset ? 0 : 3.2;
-    this.ambient.intensity = night ? 0.028 : 0;
-    shadowFloor.value = night || sunset ? 0 : 0.028;
-    this.scene.background.set(night || sunset ? 0x030303 : 0xe6e6e6);
+    const late = T.MathUtils.smoothstep(state.dayTime, C.dayDuration-60, C.dayDuration);
+    const closing = night ? 1 : sunset ? T.MathUtils.smoothstep(state.phaseTime,0,C.sunsetDuration) : 0;
+    this.sun.intensity = (3.2 - 2.95*late) * (1-closing);
+    this.ambient.intensity = .028*closing;
+    shadowFloor.value = (.045-.037*late)*(1-closing);
+    this.scene.background.set(0xe6e6e6).lerp(new T.Color(0x303030),late).lerp(new T.Color(0x030303),closing);
+    this.exitLamp.intensity = 12*(late*.25+closing*.75);
+    this.exitGlow.visible = late > .05 || night;
+    this.actors.killer.traverse(o => {
+      if (!o.isMesh || !o.material.emissive) return;
+      if (!o.userData.baseMaterial) {
+        o.userData.baseMaterial=o.material;
+        o.userData.selfMaterial=softenShadows(o.material.clone());
+        o.userData.selfMaterial.emissive.set(0x4b4b4b);
+      }
+      o.material = night && role === "killer" && !menu ? o.userData.selfMaterial : o.userData.baseMaterial;
+    });
     this.scene.fog.color.copy(this.scene.background);
     this.gate.visible = state.phase === "PREPARATION";
     Object.entries(this.actors).forEach(([r, a]) => {
