@@ -34,11 +34,12 @@ test("exhibit poses blend from reachable approaches, lock facing and safely rele
       if (g.nearestSpot()?.id === spot.id) { entry = { ...g.state.players.killer }; break; }
     }
     assert.ok(entry, `reachable pose ${spot.id}`);
+    const preview = g.nearestSpot();
     g.action("killer", "pose");
     advance(g, C.poseDuration + .05);
     const k = g.state.players.killer;
     assert.equal(k.spotId, spot.id);
-    assert.equal(k.pose, spot.pose);
+    assert.equal(k.pose, preview.pose);
     g.input("killer", { yaw: 2.2 });
     advance(g, 1);
     assert.equal(k.x, spot.x);

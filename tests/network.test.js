@@ -303,3 +303,24 @@ test("browser connection automatically resumes and can restore its saved tab ses
     peer.ws.close();
   } finally { conn?.close(); await app.close(); }
 });
+
+test('classic disguise pose and preview selection reach both websocket clients', async () => {
+  const app=createApp({port:0,host:'127.0.0.1'}), {port}=await app.start();
+  const a=client(`ws://127.0.0.1:${port}/ws`), b=client(`ws://127.0.0.1:${port}/ws`);
+  try {
+    await Promise.all([a.open(),b.open()]);
+    a.send({type:'host',role:'detective'});
+    const {code}=await a.wait('room');b.send({type:'join',code});await b.wait('state');
+    const g=app.rooms.get(code).game;g.phase('DAY');
+    for(const pose of ['david','discobolus','liberty','thinker','victory','venus']) {
+      if(g.state.players.killer.still) g.leaveStill();
+      for(let i=0;i<12;i++) g.tick(.025);
+      Object.assign(g.state.players.killer,{x:0,z:-3.5});g.state.sculpturePose=pose;
+      b.send({type:'action',action:'pose'});
+      const states=await Promise.all([a,b].map(c=>c.wait('state',m=>m.state.players.killer.still && m.state.players.killer.pose===pose)));
+      assert.equal(states[0].state.players.killer.pose,states[1].state.players.killer.pose);
+      assert.equal(states[0].state.sculpturePose,states[1].state.sculpturePose);
+      assert.notEqual(states[0].state.sculpturePose,pose);
+    }
+  } finally {a.ws.close();b.ws.close();await app.close();}
+});

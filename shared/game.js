@@ -1,6 +1,6 @@
 import { CONFIG as C, STATES as S } from "./config.js";
 import { solids, movementSolids, spots, exit, statues } from "./world.js";
-import { playerBodyParts } from "./body.js";
+import { playerBodyParts, CLASSIC_POSES } from "./body.js";
 import { updateBreath } from "./breath.js";
 import {
   clamp,
@@ -54,6 +54,7 @@ export class Game {
   }
   reset() {
     this.state = {
+      sculpturePose: CLASSIC_POSES[Math.floor(Math.random() * CLASSIC_POSES.length)],
       phase: S.PREPARATION,
       phaseTime: 0,
       dayTime: 0,
@@ -110,7 +111,7 @@ export class Game {
   }
   nearestSpot() {
     const p = this.state.players.killer;
-    return [...spots, ...this.wallPoses()]
+    return [...spots.map(s => s.y === .7 ? { ...s, pose: this.state.sculpturePose || CLASSIC_POSES[0] } : s), ...this.wallPoses()]
       .filter((s) => distance(s, p) <= s.range && this.canStandAt(p.x, p.z)
         && this.posePathClear(p, s, s)
         && distance(s, this.state.players.detective) >= 0.65)
@@ -227,6 +228,10 @@ export class Game {
             stillForward: this.inputs.killer?.forward || 0,
             stillStrafe: this.inputs.killer?.strafe || 0,
           });
+          if (spot.y === .7) {
+            const choices = CLASSIC_POSES.filter(pose => pose !== spot.pose);
+            this.state.sculpturePose = choices[Math.floor(Math.random() * choices.length)];
+          }
           this.event("still", { spotId: spot.id });
         }
       }

@@ -21,7 +21,7 @@ test('wall pose closes the rear gap without putting any hit box through the wall
 });
 
 test('rendered limb endpoints meet throughout walking and special-pose transitions', () => {
-  for (const pose of ['stand', 'sit', 'crouch', 'curl', 'arms', 'contrapposto']) {
+  for (const pose of ['stand', 'sit', 'crouch', 'curl', 'arms', 'contrapposto', 'david', 'discobolus', 'liberty', 'thinker', 'victory', 'venus']) {
     for (const mix of [0, .25, .5, .75, 1]) {
       const parts = bodyParts(pose, 0, 0, false,
         { poseFrom: 'stand', poseMix: mix, phase: mix * Math.PI * 2, blend: .7 });

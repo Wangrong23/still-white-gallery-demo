@@ -1,3 +1,4 @@
+import { SculptureSurface } from './sculpture-surface.js';
 import * as T from "three";
 import { CONFIG as C } from "../shared/config.js";
 import { sculptureGeometry, detectiveGeometry, detectivePalette, decorateGallery, posterTexture } from "./noir.js";
@@ -490,7 +491,13 @@ export class Gallery {
     mouth.position.set(0, -0.071, -0.147);
     face.add(mouth);
     a.userData.mouth = mouth;
-    face.visible = !detective; // Detective facial features are authored into its Blender head mesh.
+    face.visible = false;
+    if (!detective) {
+      for (const part of a.userData.parts) part.visible = false;
+      const material = softenShadows(white.clone());
+      material.flatShading = true;
+      a.userData.surface = new SculptureSurface(a, material);
+    }
     return a;
   }
   poseActor(a, p, time) {
@@ -501,8 +508,9 @@ export class Gallery {
       const m = a.userData.parts[i];
       m.position.set(part.x, part.y, part.z);
       m.scale.set(part.w, part.h, part.d);
-      m.rotation.set(part.rx || 0, 0, part.rz || 0);
+      m.rotation.set(part.rx || 0, part.ry || 0, part.rz || 0);
     });
+    a.userData.surface?.update();
     const head = parts.find((p) => p.name === "head");
     a.userData.face.position.set(head.x, head.y, head.z);
     a.userData.face.children[0].scale.y = 1;
@@ -594,6 +602,7 @@ export class Gallery {
       a.visible = true;
     });
     this.deaths.update(state.players, this.actors, dt, menu);
+    if (state.players.killer.death) this.actors.killer.userData.surface.update();
     const p = state.players[role];
     const fallen = Object.values(state.players).find(player => player.death);
     this.posePreview.visible = !menu && role === "killer" && ["PREPARATION", "DAY"].includes(state.phase)

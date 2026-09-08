@@ -39,12 +39,13 @@ export function rotateY(p, a) {
 }
 export function inversePart(p, part) {
   let v = { x: p.x - part.x, y: p.y - part.y, z: p.z - part.z };
-  // THREE Euler XYZ: invert X then Z (Y is zero).
+  // THREE Euler XYZ: invert X, then Y, then Z.
   if (part.rx) {
     const c = Math.cos(-part.rx),
       s = Math.sin(-part.rx);
     v = { x: v.x, y: v.y * c - v.z * s, z: v.y * s + v.z * c };
   }
+  if (part.ry) v = rotateY(v, -part.ry);
   if (part.rz) {
     const c = Math.cos(-part.rz),
       s = Math.sin(-part.rz);

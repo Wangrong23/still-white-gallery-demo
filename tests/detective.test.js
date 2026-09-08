@@ -62,3 +62,19 @@ test('the revolver grip stays at the right wrist throughout the walking cycle', 
     assert.ok(wrist.distanceTo(grip) < 1e-9);
   }
 });
+
+test('turned detective head and hat keep rendering and ray transforms aligned', async () => {
+  const {inversePart}=await import('../shared/math.js');
+  for(const blend of [0,.5,1]) {
+    const parts=bodyParts('stand',0,0,true,{blend});
+    const head=parts.find(p=>p.name==='head');
+    assert.ok(head.rx<0 && head.ry<0);
+    for(const part of parts.filter(p=>p.name==='head'||p.name==='hat')) {
+      assert.equal(part.rx,head.rx);assert.equal(part.ry,head.ry);
+      const local=new T.Vector3(.07,.02,-.09);
+      const world=local.clone().applyEuler(new T.Euler(part.rx,part.ry,part.rz||0)).add(new T.Vector3(part.x,part.y,part.z));
+      const back=inversePart(world,part);
+      assert.ok(local.distanceTo(new T.Vector3(back.x,back.y,back.z))<1e-9);
+    }
+  }
+});

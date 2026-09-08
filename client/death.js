@@ -11,7 +11,7 @@ export function fallenPose(p, age) {
   const rest = bodyParts("stand", 0, 0, p.role === "detective", { relaxedArms: true });
   const parts = p.death.parts.map((part, i) => {
     const out = { ...part };
-    for (const key of ["x", "y", "z", "rx", "rz"])
+    for (const key of ["x", "y", "z", "rx", "ry", "rz"])
       out[key] = T.MathUtils.lerp(part[key] || 0, rest[i][key] || 0, relax);
     if (part.name === "arm") out.rz += Math.sign(part.x) * .28 * relax;
     return out;
@@ -24,7 +24,7 @@ export function fallenPose(p, age) {
   // Rest every body bound above the floor, including coat, hat and bent limbs.
   let lowest = Infinity;
   for (const part of parts) {
-    const local = new T.Quaternion().setFromEuler(new T.Euler(part.rx, 0, part.rz));
+    const local = new T.Quaternion().setFromEuler(new T.Euler(part.rx, part.ry || 0, part.rz));
     for (const x of [-1, 1]) for (const y of [-1, 1]) for (const z of [-1, 1]) {
       const corner = new T.Vector3(x * part.w / 2, y * part.h / 2, z * part.d / 2)
         .applyQuaternion(local).add(new T.Vector3(part.x, part.y, part.z)).applyQuaternion(rotation);
@@ -36,7 +36,7 @@ export function fallenPose(p, age) {
   const gun = parts.find(part => part.name === "gun");
   if (gun) {
     const center = new T.Vector3(gun.x, gun.y, gun.z).applyQuaternion(rotation).add(position);
-    const gunRotation = rotation.clone().multiply(new T.Quaternion().setFromEuler(new T.Euler(gun.rx, 0, gun.rz)));
+    const gunRotation = rotation.clone().multiply(new T.Quaternion().setFromEuler(new T.Euler(gun.rx, gun.ry || 0, gun.rz)));
     const extent = [[gun.w, 1, 0, 0], [gun.h, 0, 1, 0], [gun.d, 0, 0, 1]]
       .reduce((sum, [size, x, y, z]) => sum + Math.abs(new T.Vector3(x, y, z).applyQuaternion(gunRotation).y) * size / 2, 0);
     const drop = new T.Vector3(0, (.025 + extent - center.y) * smooth((age - .35) / .7), 0)
@@ -98,7 +98,7 @@ export class DeathEffects {
       pose.parts.forEach((part, i) => {
         const mesh = actor.userData.parts[i];
         mesh.position.set(part.x, part.y, part.z);
-        mesh.rotation.set(part.rx, 0, part.rz);
+        mesh.rotation.set(part.rx, part.ry || 0, part.rz);
       });
       const head = pose.parts.find(part => part.name === "head");
       actor.userData.face.position.set(head.x, head.y, head.z);

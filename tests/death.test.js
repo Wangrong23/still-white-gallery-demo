@@ -46,7 +46,7 @@ test("inspection and nonviolent endings do not create blood or a corpse", () => 
 });
 
 test("every pose falls horizontally with all body bounds above the floor", () => {
-  for (const role of ["detective", "killer"]) for (const stance of ["stand", "sit", "curl", "wall", "arms"]) {
+  for (const role of ["detective", "killer"]) for (const stance of ["stand", "sit", "curl", "david", "discobolus", "liberty", "thinker", "victory", "venus", "wall", "arms"]) {
     const p = fatal(role === "killer" ? "shot" : "attack").state.players[role];
     p.y = stance === "sit" ? .7 : 0;
     p.death.parts = bodyParts(stance, 0, 0, role === "detective");
@@ -54,7 +54,7 @@ test("every pose falls horizontally with all body bounds above the floor", () =>
       const pose = fallenPose(p, age);
       if (age > 1) assert.ok(Math.abs(new T.Vector3(0, 1, 0).applyQuaternion(pose.rotation).y) < 1e-6);
       for (const part of pose.parts) {
-        const local = new T.Quaternion().setFromEuler(new T.Euler(part.rx, 0, part.rz));
+        const local = new T.Quaternion().setFromEuler(new T.Euler(part.rx, part.ry || 0, part.rz));
         for (const x of [-1, 1]) for (const y of [-1, 1]) for (const z of [-1, 1]) {
           const corner = new T.Vector3(x * part.w / 2, y * part.h / 2, z * part.d / 2)
             .applyQuaternion(local).add(new T.Vector3(part.x, part.y, part.z))

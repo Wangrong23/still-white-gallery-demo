@@ -3,7 +3,7 @@ Run after generating art/detective-bind.json from shared/body.js (see art/README
 Creates a separate scene and saves a copy; existing Blender scenes are preserved.
 """
 import bpy, json, math, pathlib
-from mathutils import Vector
+from mathutils import Vector, Matrix
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 bind = json.loads((ROOT / 'art/detective-bind.json').read_text())
@@ -206,7 +206,9 @@ for i,part in enumerate(bind):
     key='crown' if part['name']=='hat' and part['h']>.1 else part['name']
     obj=bpy.data.objects.new('DET_%02d_%s'%(i,key),templates[key]); collection.objects.link(obj)
     obj.location=(part['x'],-part['z'],part['y']); obj.scale=(part['w'],part['d'],part['h'])
-    obj.rotation_euler=(part.get('rx',0),-part.get('rz',0),0)
+    C=Matrix(((1,0,0),(0,0,-1),(0,1,0)))
+    R=Matrix.Rotation(part.get('rx',0),3,'X') @ Matrix.Rotation(part.get('ry',0),3,'Y') @ Matrix.Rotation(part.get('rz',0),3,'Z')
+    obj.rotation_euler=(C @ R @ C.transposed()).to_euler()
     if key=='head':
         cig=bpy.data.objects.new('DET_cigarette',templates['cigarette']); collection.objects.link(cig)
         cig.parent=obj

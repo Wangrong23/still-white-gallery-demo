@@ -160,12 +160,12 @@ export const spots = [
 ].map((s) => ({ ...s, range: 1.7 }));
 
 export const statues = [
-  { x: -3, y: 0.7, z: -5, yaw: 0, pose: "statue" },
-  { x: 3, y: 0.7, z: -5, yaw: 0, pose: "statue" },
-  { x: -20, y: 0, z: -16, yaw: 0, pose: "hands" },
-  { x: -14, y: 0, z: -16, yaw: 0, pose: "arms" },
-  { x: 21, y: 0, z: 14, yaw: 0, pose: "contrapposto" },
-  { x: -17, y: 0, z: -16, yaw: 0, pose: "crouch" },
+  { x: -3, y: 0.7, z: -5, yaw: 0, pose: "david" },
+  { x: 3, y: 0.7, z: -5, yaw: 0, pose: "liberty" },
+  { x: -20, y: 0, z: -16, yaw: 0, pose: "discobolus" },
+  { x: -14, y: 0, z: -16, yaw: 0, pose: "victory" },
+  { x: 21, y: 0, z: 14, yaw: 0, pose: "venus" },
+  { x: -17, y: 0, z: -16, yaw: 0, pose: "thinker" },
 ];
 export const props = [
   { type: "plant", x: -20, z: -3 },
