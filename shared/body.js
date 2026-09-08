@@ -116,7 +116,7 @@ export function bodyParts(pose = 'stand', motion = 0, breath = 0, detective = fa
   return parts;
 }
 export function playerBodyParts(p) {
-  return bodyParts(p.pose, 0, p.still ? p.breathOffset || 0 : 0, p.role === 'detective', {
+  return bodyParts(p.pose, 0, p.breathOffset || 0, p.role === 'detective', {
     blend: p.still ? 0 : (p.moveBlend ?? (p.moving ? 1 : 0)),
     phase: (p.step || 0) * Math.PI / .47,
     turn: p.still ? 0 : p.turnBlend || 0,

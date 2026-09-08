@@ -20,9 +20,9 @@ const gray = new T.MeshToonMaterial({ color: 0xbcbcbc, gradientMap: shadowRamp, 
 // A common linear-light floor lifts only dark surfaces. Unlike ambient light,
 // it does not multiply each object's albedo and reveal the figure in shelter.
 const shadowFloor = { value: 0.045 };
-function softenShadows(material) {
+function softenShadows(material, floor = shadowFloor) {
   material.onBeforeCompile = (shader) => {
-    shader.uniforms.shadowFloor = shadowFloor;
+    shader.uniforms.shadowFloor = floor;
     shader.fragmentShader = "uniform float shadowFloor;\n" + shader.fragmentShader;
     shader.fragmentShader = shader.fragmentShader.replace(
       "#include <opaque_fragment>",
@@ -32,7 +32,7 @@ function softenShadows(material) {
   material.customProgramCacheKey = () => "shared-shadow-floor-v1";
   return material;
 }
-[ink, white, gray].forEach(softenShadows);
+[ink, white, gray].forEach(material => softenShadows(material));
 const detectiveMaterials = detectivePalette.map(color => softenShadows(
   new T.MeshToonMaterial({ color, gradientMap: shadowRamp, shadowSide: T.BackSide }),
 ));
@@ -590,10 +590,10 @@ export class Gallery {
       if (!o.isMesh || !o.material.emissive) return;
       if (!o.userData.baseMaterial) {
         o.userData.baseMaterial=o.material;
-        o.userData.selfMaterial=softenShadows(o.material.clone());
-        o.userData.selfMaterial.emissive.set(0x4b4b4b);
+        o.userData.selfMaterial=softenShadows(o.material.clone(), { value: .085 });
+        o.userData.selfMaterial.emissive.set(0x000000);
       }
-      o.material = night && role === "killer" && !menu ? o.userData.selfMaterial : o.userData.baseMaterial;
+      o.material = role === "killer" && !menu ? o.userData.selfMaterial : o.userData.baseMaterial;
     });
     this.scene.fog.color.copy(this.scene.background);
     this.gate.visible = state.phase === "PREPARATION";

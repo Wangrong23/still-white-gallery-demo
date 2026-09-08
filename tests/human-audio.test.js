@@ -43,3 +43,20 @@ test('recorded exhaustion stops local breathing, delays the next breath, and ded
   assert.equal(fades,1);assert.equal(gasps,1);assert.equal(a.nextBreath,6.2);
   assert.equal(a.selfBreath,null);
 });
+
+test('detective movement and inspection never play self breath, killer still breathes', async()=>{
+  const {Game}=await import('../shared/game.js');
+  const a=new AudioDirector(),g=new Game(),calls=[];
+  g.phase('DAY');a.phase='DAY';a.ctx={currentTime:10,state:'running'};
+  const param=()=>({value:0,cancelScheduledValues(){},setValueAtTime(){},linearRampToValueAtTime(){}});
+  for(const key of ['musicGate','musicDuck','ambience','earGain'])a[key]={gain:param()};
+  a.airFilter={frequency:param()};a.music={update(){}};
+  a.sample=(name)=>{calls.push(name);return {};};a.noise=()=>{};
+  Object.assign(g.state.players.detective,{moving:true,inspectProgress:.5});
+  a.updateState(g.state,'detective',{},.1);
+  assert.ok(!calls.some(name=>name.startsWith('breath')));
+  a.updateState(g.state,'killer',{},.1);
+  assert.ok(calls.some(name=>name.startsWith('breath')));
+  let stopped=0;a.selfBreath={fadeOut(){stopped++;}};
+  a.updateState(g.state,'detective',{},.1);assert.equal(stopped,1);
+});

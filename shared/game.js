@@ -35,6 +35,7 @@ const player = (role) => ({
   breathNeedsRelease: false,
   breathPhase: 0,
   breathRate: 0,
+  breathStrain: 0,
   breathOffset: 0,
   cooldown: 0,
   moving: false,

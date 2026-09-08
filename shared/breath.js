@@ -30,12 +30,16 @@ export function updateBreath(p, pressed, dt, allowed) {
       p.breath + recoveryDt * C.breathDuration / C.breathRecovery);
   }
   // Ease breathing speed to zero at the current pose; never snap to neutral.
-  const targetRate = p.still && !p.holding ? 1 : 0;
+  // Exhaustion produces rapid, larger heaves, then settles through cooldown.
+  const strainTarget = allowed ? Math.max(0, p.cooldown / C.breathCooldown) : 0;
+  p.breathStrain = strainTarget + ((p.breathStrain || 0) - strainTarget) * Math.exp(-dt / .14);
+  const visibleBreath = p.still || p.breathStrain > .02;
+  const targetRate = visibleBreath && !p.holding ? 1 + 2.5 * p.breathStrain : 0;
   const decay = Math.exp(-dt / C.breathTransition);
   const phaseStep = targetRate * dt + (p.breathRate - targetRate)
     * C.breathTransition * (1 - decay);
   p.breathPhase += phaseStep * 2.1;
   p.breathRate = targetRate + (p.breathRate - targetRate) * decay;
-  p.breathOffset = p.still ? Math.sin(p.breathPhase) * 0.016 : 0;
+  p.breathOffset = visibleBreath ? Math.sin(p.breathPhase) * (.016 + .052 * p.breathStrain) : 0;
   return exhausted;
 }

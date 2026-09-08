@@ -134,7 +134,7 @@ export class AudioDirector extends Sound {
       }
     }
     const normal = ['DAY', 'NIGHT'].includes(state.phase) && active;
-    if (v.holding || !normal) this.stopLocalBreath();
+    if (role !== 'killer' || v.holding || !normal) this.stopLocalBreath();
     automate(this.musicGate.gain, normal ? 1 : 0, this.ctx, normal ? .35 : .1);
     automate(this.musicDuck.gain, now < this.vacuumUntil ? 0 : now < this.shotUntil ? .28 : v.inspecting ? .71 : 1,
       this.ctx, now < this.vacuumUntil || now < this.shotUntil ? .035 : .4);
@@ -169,7 +169,7 @@ export class AudioDirector extends Sound {
         this.tone(53, .12, level); this.tone(46, .15, level * .65, 'sine', 0, .18);
       }
     }
-    if (normal && !v.holding && now >= this.nextBreath && (role === 'killer' || v.inspecting || v.moving)) {
+    if (normal && !v.holding && now >= this.nextBreath && role === 'killer') {
       this.nextBreath = now + (v.moving ? 1.65 : 3.4);
       this.selfBreath = this.sample(this.variant('breath', 2), v.inspecting ? .055 : v.moving ? .07 : .025,
         0, 1, 2800, { reverb: 0 }) || this.noise(.65, v.inspecting ? .018 : v.moving ? .025 : .01, 0, 650);

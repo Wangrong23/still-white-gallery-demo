@@ -109,3 +109,13 @@ test("sunset cancels holding and reset clears all exhaustion and animation state
   assert.equal(fresh.breath, C.breathDuration); assert.equal(fresh.breathNeedsRelease, false);
   assert.equal(fresh.cooldown, 0); assert.equal(fresh.breathDelay, 0); assert.equal(fresh.breathOffset, 0);
 });
+
+test('exhaustion makes the body heave harder and faster before settling',()=>{
+  const g=setup(),p=g.state.players.killer;
+  g.input('killer',{breath:true});advance(g,C.breathDuration);
+  const phase=p.breathPhase;let peak=0;
+  for(let i=0;i<100;i++){g.tick(.01);peak=Math.max(peak,Math.abs(p.breathOffset));}
+  assert.ok(peak>.045);assert.ok(p.breathPhase-phase>5);
+  advance(g,7);assert.ok(Math.abs(p.breathOffset)<=.0161);
+  g.reset();assert.equal(g.state.players.killer.breathStrain,0);
+});
