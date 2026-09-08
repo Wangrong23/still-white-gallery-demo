@@ -4,7 +4,7 @@ import { Game } from "../shared/game.js";
 import { CONFIG as C, BINDINGS } from "../shared/config.js";
 import { spots, rooms } from "../shared/world.js";
 import { sunAt } from "../shared/sun.js";
-import { Sound } from "./audio.js";
+import { AudioDirector } from "./audio-director.js";
 import { RehearsalBot } from "./bot.js";
 import { Connection } from "./network.js";
 import { SnapshotBuffer } from "./interpolation.js";
@@ -25,7 +25,7 @@ try {
   console.error(e);
   throw e;
 }
-const sound = new Sound();
+const sound = new AudioDirector();
 let settings = { ...DEFAULT_SETTINGS };
 const settingsDialog = mountSettings({ language, storage: localStorage, onChange: (next) => {
   settings = next;
@@ -65,12 +65,16 @@ try {
     ...JSON.parse(localStorage.getItem("still.bindings") || "{}"),
   };
 } catch {}
+delete bindings.mark;
 const connection = new Connection(
   (s) => {
     snapshots.push(s, performance.now());
     state = s;
     game.state = s;
     prediction.reconcile(s, connection.role || role);
+    // A background tab may throttle rAF; server phase changes must still kill music now.
+    if (started && sound.phase !== s.phase)
+      sound.updateState(s, connection.role || role, { aim }, 0, !connectionBlocked);
   },
   (m) => {
     if (m.type === "start") {
@@ -80,7 +84,7 @@ const connection = new Connection(
       gallery.resetEffects();
       eventId = 0;
       lastPhase = "";
-      sound.nextHeart = 0;
+      sound.reset();
       keys.clear();
       view = { yaw: 0, pitch: 0 };
       $("results").hidden = true;
@@ -103,7 +107,7 @@ const connection = new Connection(
       if (m.started) {
         if (!started) begin("online", connection.role, false);
         view = { yaw: state.players[role].yaw, pitch: state.players[role].pitch };
-        eventId = state.eventId; // Do not replay old shots, footsteps or broadcasts.
+        eventId = state.eventId; sound.reset(eventId, state.phase); // Do not replay old shots, footsteps or broadcasts.
         lastPhase = state.phase === "GAME_OVER" ? "" : state.phase;
         phaseUntil = 0;
         connectionStatus(m.active ? "reconnected" : "peerReconnecting", !m.active);
@@ -210,7 +214,7 @@ function begin(nextMode, nextRole, capturePointer = true) {
   connectionBlocked = false;
   $("network-cancel").hidden = true;
   eventId = 0;
-  sound.nextHeart = 0;
+  sound.reset();
   lastPhase = "";
   view = { yaw: state.players[role].yaw, pitch: 0 };
   keys.clear();
@@ -219,7 +223,7 @@ function begin(nextMode, nextRole, capturePointer = true) {
   $("pause").hidden = true;
   $("results").hidden = true;
   $("resume").disabled = false;
-  if (capturePointer) { sound.start(); lock(); }
+  if (capturePointer) { sound.ensureAudioStarted(); lock(); }
 }
 function pause(value) {
   if (!started) return;
@@ -275,11 +279,12 @@ $("replay").onclick = () => {
   }
 };
 canvas.addEventListener("click", () => {
-  if (started && !paused && state.phase !== "GAME_OVER") lock();
+  if (started && !paused && state.phase !== "GAME_OVER") { sound.ensureAudioStarted(); lock(); }
 });
 document.addEventListener("pointerlockchange", () => {
   if (
     !document.pointerLockElement &&
+    !(mode === 'local' && debug) &&
     started &&
     state.phase !== "GAME_OVER" &&
     !paused
@@ -353,7 +358,11 @@ document.addEventListener("keydown", (e) => {
       lastPhase = "";
       toast(tf("controlRole", { role: t(role) }));
     }
-    if (e.code === "F2") debug = !debug;
+    if (e.code === "F2") {
+      debug = !debug;
+      if (debug) document.exitPointerLock();
+      else lock();
+    }
     if (e.code === "F3") game.debugAction("time");
     if (e.code === "F4") game.debugAction("sunset");
     if (e.code === "F6") game.debugAction("night");
@@ -368,7 +377,7 @@ document.addEventListener("keydown", (e) => {
       game.reset();
       eventId = 0;
       lastPhase = "";
-      sound.nextHeart = 0;
+      sound.reset();
       game.debugAction("day");
       state = game.state;
       botEnabled = false;
@@ -494,7 +503,6 @@ function hud(now) {
   );
   const tension = role === "killer" ? game.tension() : 0;
   $("vignette").style.opacity = role === "killer" ? tension * 0.26 : 0;
-  if (role === "killer") sound.update(tension, s.elapsed, night);
   if (s.phase !== lastPhase) {
     lastPhase = s.phase;
     if (s.phase === "PREPARATION")
@@ -564,6 +572,7 @@ function hud(now) {
     const sun = sunAt(s.dayTime);
     $("debug").textContent =
       `LOCAL DEBUG  [F2]\nSTATE    ${s.phase}\nSUN      ${((sun.elevation * 180) / Math.PI).toFixed(1)}° / ${((sun.azimuth * 180) / Math.PI).toFixed(1)}°\nDAY      ${(C.dayDuration - s.dayTime).toFixed(1)} s left\nNIGHT    ${(45 - s.nightTime).toFixed(1)} s left\nIN FOV   ${game.tension() > 0.05}\nSPOT     ${s.players.killer.spotId ?? "—"}\nBREATH   ${s.players.killer.breath.toFixed(1)}\nBOT      ${botEnabled ? "ON" : "OFF"}\nDRAW     ${gallery.renderer.info.render.calls}\nF3 +45s · F4 sunset · F6 night\nF7 ammo · F8 spots · F9 bot · Tab role`;
+    $("debug").textContent += sound.debugText();
   }
 }
 function frame(now) {
@@ -602,16 +611,13 @@ function frame(now) {
         networkClock %= 1 / 30;
       }
     }
+    sound.updateState(state, role, { aim }, dt, !(mode === "local" && paused) && !connectionBlocked);
     for (const e of state.events) {
       if (e.id <= eventId) continue;
       eventId = e.id;
       // STILL locks the body, but listening direction follows the free camera.
       sound.event(e, { ...state.players[role], yaw: backYaw() }, role);
       if (e.type === "shot") gallery.shot(e.point, e.surface);
-      if (e.type === "mark" && role === "detective" && e.placed)
-        toast(t("markPlaced"));
-      if (e.type === "mark-alert" && role === "detective")
-        toast(tf("markAlert", { spot: e.spotId + 1 }));
       if (e.type === "inspected" && role === "detective") toast(t("inspected"));
       if (e.type === "penalty" && role === "detective")
         toast(t("emptyShot"));
@@ -624,6 +630,7 @@ function frame(now) {
       hudClock = 0;
     }
   }
+  $("audio-debug-controls").hidden = !debug || mode !== "local";
   const rendered = mode === "online" ? prediction.sample(snapshots.sample(state, now), paused ? null : input(), networkClock) : state;
   gallery.update(rendered, role, { yaw: backYaw(), pitch: view.pitch }, dt, {
     menu: mode === "menu",
@@ -670,6 +677,8 @@ window.still = {
       game.inputs = {};
     }
   },
+  audio: sound,
+  audioDebug,
   action,
   bind(action, code) {
     if (action in BINDINGS) {
@@ -679,3 +688,39 @@ window.still = {
   },
 };
 connection.resumeSaved();
+
+function audioDebug(command) {
+  if (mode !== 'local') return;
+  sound.ensureAudioStarted();
+  if (command.startsWith('Mute ')) return sound.mute(command.slice(5).toLowerCase());
+  if (['DAY','T-60','T-10','SUNSET','NIGHT','NIGHT T-10'].includes(command)) {
+    if (state.phase === 'GAME_OVER') {
+      game.reset(); state = game.state; eventId = 0; sound.reset(); gallery.resetEffects();
+    }
+    paused = false;
+    $('pause').hidden = true;
+    $('results').hidden = true;
+    // Local test controls should not immediately trigger the real south-door escape.
+    for (const player of Object.values(state.players)) if (player.z > 20.5) player.z = 18.5;
+    const phase = command.startsWith('NIGHT') ? 'NIGHT' : command === 'SUNSET' ? 'SUNSET' : 'DAY';
+    game.phase(phase);
+    state.dayTime = phase === 'DAY' ? command === 'T-60' ? C.dayDuration - 60 : command === 'T-10' ? C.dayDuration - 10 : 0 : C.dayDuration;
+    state.nightTime = command === 'NIGHT T-10' ? C.nightDuration - 10 : 0;
+  }
+  if (command === 'Wrong Shot' || command === 'Gunshot') {
+    const { x, z } = state.players.detective;
+    game.event('shot', { x, z });
+    if (command === 'Wrong Shot' && state.phase === 'DAY') {
+      state.dayTime = Math.min(C.dayDuration, state.dayTime + C.wrongShotPenalty);
+      game.event('penalty');
+    }
+  }
+  if (command === 'Support') sound.support();
+}
+const audioControls = document.createElement('div');
+audioControls.id = 'audio-debug-controls'; audioControls.hidden = true;
+$('debug').after(audioControls);
+for (const command of ['Mute Music','Mute Ambience','Mute Sfx','DAY','T-60','T-10','SUNSET','NIGHT','NIGHT T-10','Wrong Shot','Gunshot','Support']) {
+  const button = document.createElement('button'); button.textContent = command;
+  button.onclick = () => audioDebug(command); audioControls.append(button);
+}

@@ -62,8 +62,6 @@ export class Game {
       ammo: C.detectiveAmmo,
       result: null,
       players: { detective: player("detective"), killer: player("killer") },
-      marks: [],
-      markData: {},
       destroyedStatues: [],
       events: [],
       eventId: 0,
@@ -291,46 +289,8 @@ export class Game {
     }
     if (action === "flashlight" && role === "detective" && s.phase === S.NIGHT)
       p.flashlight = !p.flashlight;
-    if (action === "mark" && role === "detective" && s.phase === S.DAY) {
-      const o = { x: p.x, y: 1.65, z: p.z },
-        d = direction(p.yaw, p.pitch);
-      let chosen = null,
-        best = Infinity;
-      for (const spot of spots) {
-        const t = rayBox(o, d, {
-          x: spot.x,
-          y: spot.y + 1,
-          z: spot.z,
-          w: 1.4,
-          h: 2.4,
-          d: 1.4,
-        });
-        if (t < best && t < 22 && t < this.obstacleDistance(o, d) + 0.001) {
-          best = t;
-          chosen = spot;
-        }
-      }
-      if (chosen) {
-        const i = s.marks.indexOf(chosen.id);
-        if (i >= 0) {
-          s.marks.splice(i, 1);
-          delete s.markData[chosen.id];
-        }
-        else {
-          s.marks.push(chosen.id);
-          s.markData[chosen.id] = {
-            expiresAt: s.elapsed + C.markDuration,
-            triggeredAt: null,
-            inside: distance(chosen, s.players.killer) < C.markRadius,
-            lastX: s.players.killer.x,
-            lastZ: s.players.killer.z,
-          };
-          if (s.marks.length > 3) delete s.markData[s.marks.shift()];
-        }
-        this.event("mark", { placed: i < 0, spotId: chosen.id });
-      }
-    }
   }
+
   kill(role, cause, point, direction) {
     const p = this.state.players[role];
     if (p.death) return;
@@ -441,27 +401,6 @@ export class Game {
     }
     p.inspectTarget = null;
     p.inspectProgress = 0;
-  }
-  updateMarks() {
-    const s = this.state, k = s.players.killer;
-    for (const id of [...s.marks]) {
-      const m = s.markData[id];
-      if (s.phase !== S.DAY || s.elapsed >= m.expiresAt) {
-        s.marks.splice(s.marks.indexOf(id), 1);
-        delete s.markData[id];
-        continue;
-      }
-      const inside = distance(spots[id], k) < C.markRadius;
-      const moved = Math.hypot(k.x - m.lastX, k.z - m.lastZ) > 0.001;
-      if (m.triggeredAt === null && ((inside && (k.moving || moved)) || inside !== m.inside)) {
-        m.triggeredAt = s.elapsed;
-        m.expiresAt = s.elapsed + 5;
-        this.event("mark-alert", { spotId: id });
-      }
-      m.inside = inside;
-      m.lastX = k.x;
-      m.lastZ = k.z;
-    }
   }
   bodyDistance(p, o, d) {
     const local = rotateY(
@@ -614,6 +553,5 @@ export class Game {
       }
     }
     this.inspect(dt);
-    this.updateMarks();
   }
 }

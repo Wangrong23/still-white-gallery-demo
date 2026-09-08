@@ -21,8 +21,6 @@ export const CONFIG = Object.freeze({
   interactRange: 1.7,
   inspectDuration: 1.2,
   inspectConcealedDuration: 3.6,
-  markDuration: 45,
-  markRadius: 1.7,
   poseDuration: 0.3,
   autoStillDelay: 0.6,
   attackRange: 1.65,
@@ -39,7 +37,6 @@ export const BINDINGS = Object.freeze({
   still: "KeyE",
   pose: "KeyF",
   breath: "Space",
-  mark: "KeyQ",
   flashlight: "KeyF",
   lookBack: "KeyR",
 });

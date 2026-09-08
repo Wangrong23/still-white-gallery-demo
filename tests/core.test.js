@@ -132,19 +132,12 @@ test("debug commands cannot mutate online game", () => {
   assert.equal(g.state.phase, "PREPARATION");
 });
 
-test("suspicion marks remain at spots, toggle, and cap at three", () => {
-  const g = new Game({ debug: true });
-  g.debugAction("day");
-  for (const id of [0, 3, 8, 10]) {
-    const s = spots[id];
-    Object.assign(g.state.players.detective, { x: s.x, z: s.z + 3, yaw: 0, pitch: 0 });
-    g.action("detective", "mark");
-  }
-  assert.deepEqual(g.state.marks, [3, 8, 10]);
-  Object.assign(g.state.players.killer, { x: 10, z: 10 });
-  assert.deepEqual(g.state.marks, [3, 8, 10]);
-  g.action("detective", "mark");
-  assert.deepEqual(g.state.marks, [3, 8]);
+test("deprecated Q mark action is inert in local gameplay", () => {
+  const g = new Game({ debug: true }); g.debugAction('day');
+  const before = structuredClone(g.state);
+  g.action('detective', 'mark');
+  assert.deepEqual(g.state, before);
+  assert.equal('marks' in g.state, false);
 });
 
 test("a full default round terminates through all five phases", () => {

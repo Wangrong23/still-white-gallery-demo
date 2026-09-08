@@ -1,5 +1,9 @@
 import { CONFIG } from "./config.js";
 import { clamp } from "./math.js";
+export function lateDayAt(dayTime) {
+  const x = clamp((dayTime - (CONFIG.dayDuration - 60)) / 60, 0, 1);
+  return x * x * (3 - 2 * x);
+}
 export function sunAt(dayTime) {
   const progress = clamp(dayTime / CONFIG.dayDuration, 0, 1);
   const elevation = ((60 - 53 * progress) * Math.PI) / 180;

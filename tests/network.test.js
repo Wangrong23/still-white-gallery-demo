@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import { WebSocket } from "ws";
 import { createApp } from "../server/index.js";
 import { Connection } from "../client/network.js";
+import { AudioDirector } from "../client/audio-director.js";
 function client(url) {
   const ws = new WebSocket(url),
     messages = [];
@@ -23,6 +24,37 @@ function client(url) {
     },
   };
 }
+
+test('two real websocket clients drive the same complete audio phase sequence', async () => {
+  const app = createApp({port:0,host:'127.0.0.1'});
+  const {port} = await app.start();
+  const a = client(`ws://127.0.0.1:${port}/ws`), b = client(`ws://127.0.0.1:${port}/ws`);
+  const directors = [new AudioDirector(), new AudioDirector()], phases = [new Set(),new Set()];
+  try {
+    [a,b].forEach((client,i)=>client.ws.on('message',raw=>{
+      const message=JSON.parse(raw);
+      if(message.type!=='state') return;
+      const role=i?'killer':'detective', state=message.state;
+      directors[i].updateState(state,role,{},.05);
+      for(const event of state.events) directors[i].event(event,state.players[role],role);
+      phases[i].add(directors[i].debugState.phase);
+    }));
+    await Promise.all([a.open(),b.open()]);
+    a.send({type:'host',role:'detective'});
+    const {code}=await a.wait('room'); b.send({type:'join',code});
+    await b.wait('state');const game=app.rooms.get(code).game;
+    game.state.players.detective.z=3;
+    for(const phase of ['PREPARATION','DAY','SUNSET','NIGHT']) {
+      await Promise.all([a.wait('state',m=>m.state.phase===phase),b.wait('state',m=>m.state.phase===phase)]);
+      while(game.state.phase===phase) game.tick(.05);
+    }
+    await Promise.all([a.wait('state',m=>m.state.phase==='GAME_OVER'),b.wait('state',m=>m.state.phase==='GAME_OVER')]);
+    assert.equal(game.state.result,'SURVIVED');
+    assert.deepEqual([...phases[0]],['PREPARATION','DAY','SUNSET','NIGHT','GAME_OVER']);
+    assert.deepEqual(phases[0],phases[1]);
+    assert.equal(directors[0].eventId,directors[1].eventId);
+  } finally {a.ws.close();b.ws.close();await app.close();}
+});
 test("host/join, server authority, movement replication, room isolation, disconnect", async () => {
   const app = createApp({ port: 0, host: "127.0.0.1" });
   const addr = await app.start(),
@@ -82,8 +114,6 @@ test("two-player rematch resets all authoritative state and serves assets safely
     const room = app.rooms.get(r.code);
     room.game.state.ammo = 0;
     room.game.state.destroyedStatues = [1, 3];
-    room.game.state.marks = [0];
-    room.game.state.markData = { 0: { expiresAt: 45, triggeredAt: null, inside: false } };
     Object.assign(room.game.state.players.killer, { breath: 0, cooldown: 5, breathNeedsRelease: true, breathOffset: .007 });
     room.game.win("FOUND YOU");
     a.send({ type: "rematch" });
@@ -93,8 +123,8 @@ test("two-player rematch resets all authoritative state and serves assets safely
     await a.wait("waiting-rematch", (m) => m.count === 2);
     assert.equal(room.game.state.ammo, 4);
     assert.deepEqual(room.game.state.destroyedStatues, []);
-    assert.deepEqual(room.game.state.marks, []);
-    assert.deepEqual(room.game.state.markData, {});
+    assert.equal("marks" in room.game.state, false);
+    assert.equal("markData" in room.game.state, false);
     assert.equal(room.game.state.players.killer.breath, 15);
     assert.equal(room.game.state.players.killer.breathNeedsRelease, false);
     assert.equal(room.game.state.players.killer.breathOffset, 0);

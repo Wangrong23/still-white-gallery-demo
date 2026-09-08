@@ -140,3 +140,27 @@
 ## UI 可读性整理
 
 主菜单底栏增加局部阅读底色，时间统一 17:55—18:00 与五分钟；开场改为准星上方的窄幅案卷卡，减小标题、增大正文、去掉文字光晕。资源/时间等区域使用局部底色，取消描边字；完整按键只在准备阶段显示，常态呼吸不重复提示，夜间凶手隐藏不可用的呼吸资源，近身才显示袭击提示。夜间时间条显示支援进度，最后十秒显示秒数。实际浏览器检查了主菜单和警探准备卡片可读性；夜间支援文案已出现，入口处调试入夜立即触发逃离结算，未声称完成完整夜间倒数视觉检查。构建通过。
+# 2026-09-08 Dynamic audio validation
+
+- Actual game launched at localhost:5100, with real browser user gestures. No AudioContext
+  autoplay warnings or Console errors. Both imported MP3/OGG assets decoded.
+- A normal unaccelerated browser game reached the existing ESCAPED ending when the
+  detective remained by the south door. This was not changed into a support win.
+- The separate two-context browser fixture completed PREPARATION at 15.00, DAY at
+  315.00, SUNSET at 317.40 and SURVIVED at 362.45 game seconds. DAY alone used ×10
+  test acceleration; actual configuration was never changed.
+- Throughout SUNSET after its 100ms fade, both actual music gate gains stayed exactly
+  zero. Final NIGHT layers drained by T-3. Each client triggered one support siren.
+- Real breath test: 15s holding produced local heartbeat/tinnitus, exactly one server
+  gasp, and cooldown. Detective breath danger stayed zero.
+- Wrong shot advanced the clock by exactly 25s. Repeated events did not retrigger its
+  480ms vacuum or mechanical cue. Invalid audio data retained fallback buffers.
+- Observed pre-compressor sample peak including the shot: 0.0711; peak active one-shot
+  count in the round: 4. This is sampled browser telemetry, not a mastering loudness scan.
+- Two real WebSocket clients independently drove AudioDirector through all five phases
+  and received matching final event IDs. Concealed-target identity/coordinates/breath
+  changes produced identical detective music model output in automated tests.
+- Final game UI checks: F2 released the pointer; DAY and Wrong Shot controls worked;
+  SUNSET displayed 18:00 and closed the music gate. Production build passed.
+- No human headphone audition was performed. Procedural breath/gasp, doors, clocks,
+  relays and siren remain demo placeholders; existing hall IR remains ~0.95s.

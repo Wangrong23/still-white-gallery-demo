@@ -20,6 +20,8 @@ export function createApp({
     ".png": "image/png",
     ".svg": "image/svg+xml",
     ".wav": "audio/wav",
+    ".mp3": "audio/mpeg",
+    ".ogg": "audio/ogg",
   };
   const server = createServer(async (req, res) => {
     try {

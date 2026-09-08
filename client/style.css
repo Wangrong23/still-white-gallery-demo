@@ -486,6 +486,17 @@ h2 {
   padding: 16px;
   line-height: 1.6;
 }
+#audio-debug-controls {
+  position: absolute;
+  right: 20px;
+  top: 150px;
+  width: 170px;
+  padding: 8px;
+  background: #eeeeeedd;
+  pointer-events: auto;
+  z-index: 9;
+}
+#audio-debug-controls button { display: block; width: 100%; padding: 6px; font-size: 11px; }
 .overlay {
   position: fixed;
   inset: 0;

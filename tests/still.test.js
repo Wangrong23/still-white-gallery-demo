@@ -86,14 +86,6 @@ test('occupied return positions and interrupted transitions never leave a player
   assert.equal(k.still,false);assert.ok(h.canStandAt(k.x,k.z));
 });
 
-test('free STILL does not trip a motion watch until the actor moves', () => {
-  const g=day(),p=g.state.players.killer;
-  Object.assign(p,{x:0,z:-3.5});Object.assign(g.state.players.detective,{x:0,z:-2});
-  g.action('detective','mark');g.action('killer','still');advance(g,.2);
-  assert.equal(g.state.markData[0].triggeredAt,null);
-  g.input('killer',{strafe:1});g.tick(.05);
-  assert.notEqual(g.state.markData[0].triggeredAt,null);
-});
 
 test('free and exhibit STILL remain phase- and role-limited and reset cleanly', () => {
   const g=day();g.action('detective','pose');g.action('detective','still');

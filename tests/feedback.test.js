@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { Game } from "../shared/game.js";
-import { statues, spots } from "../shared/world.js";
+import { statues } from "../shared/world.js";
 import { CONFIG as C } from "../shared/config.js";
 import { SnapshotBuffer } from "../client/interpolation.js";
 const day = () => { const g = new Game(); g.phase("DAY"); return g; };
@@ -73,28 +73,6 @@ test("daylight inspection clears decoys without ammo or time penalty", () => {
   assert.deepEqual(g.state.destroyedStatues, [3]);
   assert.equal(g.state.ammo, 0); assert.ok(g.state.dayTime < C.inspectConcealedDuration + .2);
   assert.equal(g.state.result, null);
-});
-
-const watch = (g, id = 0) => {
-  const s = spots[id];
-  Object.assign(g.state.players.detective, { x: s.x, z: s.z + 3, yaw: 0, pitch: 0 });
-  g.action("detective", "mark");
-};
-test("motion watches detect a still killer leaving, alert once, expire and reset", () => {
-  const g = day();
-  Object.assign(g.state.players.killer, { x: 0, z: -3.5 }); g.action("killer", "pose"); advance(g, C.poseDuration + .1);
-  watch(g); advance(g, .2);
-  assert.equal(g.state.markData[0].triggeredAt, null);
-  g.action("killer", "still"); g.tick(.05);
-  assert.ok(g.state.markData[0].triggeredAt !== null, "stepping off the pedestal also trips the watch");
-  g.input("killer", { forward: 1, yaw: Math.PI });
-  advance(g, 1);
-  assert.ok(g.state.markData[0].triggeredAt !== null);
-  assert.equal(g.state.events.filter(e => e.type === "mark-alert").length, 1);
-  advance(g, 6); assert.deepEqual(g.state.marks, []);
-  watch(g); advance(g, 46); assert.deepEqual(g.state.marks, []);
-  watch(g); g.phase("SUNSET"); g.tick(.05); assert.deepEqual(g.state.marks, []);
-  g.reset(); assert.deepEqual(g.state.markData, {});
 });
 
 test("snapshot interpolation is smooth, takes the short rotation and never edits authority", () => {

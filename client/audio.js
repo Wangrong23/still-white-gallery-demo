@@ -45,7 +45,9 @@ export class Sound {
   }
   start() {
     if (!this.ctx) {
-      this.ctx = new AudioContext();
+      const Context = globalThis.AudioContext || globalThis.webkitAudioContext;
+      if (!Context) return;
+      this.ctx = new Context();
       this.master = this.ctx.createGain();
       this.master.gain.value = 0.3 * this.settings.volume;
       this.master.connect(this.ctx.destination);
@@ -80,7 +82,7 @@ export class Sound {
       source.start();
     }
     if (this.roomImpulse && !this.roomReverb.buffer) this.roomReverb.buffer = this.roomImpulse;
-    this.ctx.resume();
+    this.ctx.resume().catch(() => { /* A later user gesture retries. */ });
   }
   variant(base, count) {
     const index = this.variantIndex.get(base) || 0;
@@ -112,7 +114,7 @@ export class Sound {
       source.connect(highpass).connect(speaker).connect(filter);
       this.announcementSource = source;
     } else source.connect(filter);
-    filter.connect(gain).connect(p).connect(this.master);
+    filter.connect(gain).connect(p).connect(this.sfx || this.master);
     // Reflections follow the same distance/occlusion gain as the direct sound.
     const reflection = this.ctx.createGain();
     reflection.gain.value = name.startsWith("heel") ? .055 : voice ? .12 : .16;
@@ -126,8 +128,8 @@ export class Sound {
     source.start();
     return true;
   }
-  tone(freq, duration, volume = 0.15, type = "sine", pan = 0, delay = 0) {
-    if (!this.ctx || this.muted) return;
+  tone(freq, duration, volume = 0.15, type = "sine", pan = 0, delay = 0, output = this.sfx || this.master) {
+    if (!this.ctx || this.muted || volume <= 0) return;
     const t = this.ctx.currentTime + delay,
       osc = this.ctx.createOscillator(),
       gain = this.ctx.createGain(),
@@ -142,7 +144,7 @@ export class Sound {
     gain.gain.exponentialRampToValueAtTime(Math.max(0.001, volume), t + 0.006);
     gain.gain.exponentialRampToValueAtTime(0.001, t + duration);
     p.pan.value = pan;
-    osc.connect(gain).connect(p).connect(this.master);
+    osc.connect(gain).connect(p).connect(output);
     osc.start(t);
     this.track(osc);
     osc.stop(t + duration + 0.02);
@@ -150,14 +152,15 @@ export class Sound {
   }
   noise(duration, volume, pan = 0, frequency = 900) {
     if (!this.ctx || this.muted) return;
-    const buffer = this.ctx.createBuffer(
-      1,
-      Math.ceil(this.ctx.sampleRate * duration),
-      this.ctx.sampleRate,
-    );
-    const data = buffer.getChannelData(0);
-    for (let i = 0; i < data.length; i++)
-      data[i] = (Math.random() * 2 - 1) * (1 - i / data.length);
+    this.noiseBuffers ||= new Map();
+    const key = duration;
+    let buffer = this.noiseBuffers.get(key);
+    if (!buffer) {
+      buffer = this.ctx.createBuffer(1, Math.ceil(this.ctx.sampleRate * duration), this.ctx.sampleRate);
+      const data = buffer.getChannelData(0);
+      for (let i = 0; i < data.length; i++) data[i] = (Math.random() * 2 - 1) * (1 - i / data.length);
+      this.noiseBuffers.set(key, buffer);
+    }
     const s = this.ctx.createBufferSource(),
       g = this.ctx.createGain(),
       f = this.ctx.createBiquadFilter(),
@@ -167,10 +170,11 @@ export class Sound {
     f.type = "lowpass";
     f.frequency.value = frequency;
     p.pan.value = pan;
-    s.connect(f).connect(g).connect(p).connect(this.master);
+    s.connect(f).connect(g).connect(p).connect(this.sfx || this.master);
     s.start();
     this.track(s);
     s.onended = () => { s.disconnect(); f.disconnect(); g.disconnect(); p.disconnect(); };
+    return s;
   }
   event(e, listener, role) {
     if (this.muted) return;
@@ -214,42 +218,12 @@ export class Sound {
       if (gasp.gain > 0) this.noise(0.7, gasp.gain * 0.25, gasp.pan, gasp.frequency);
     }
     if (e.type === "swipe") this.noise(0.18, 0.3, 0, 3000);
-    if (e.type === "mark") this.tone(500, 0.07, 0.03);
-    if (e.type === "mark-alert" && role === "detective") {
-      this.tone(880, 0.13, 0.22);
-      this.tone(660, 0.2, 0.18, "sine", 0, 0.16);
-    }
     if (e.type === "shatter" && !this.sample(this.variant("plaster", 2), vol * .5, pan)) this.noise(0.4, vol * 0.5, pan, 4800);
-    if (e.type === "phase" && e.phase === "SUNSET") {
-      if (!this.sample("bell", .4)) for (let i = 0; i < 3; i++)
-        this.tone(420 - i * 65, 1.2, 0.3, "sine", 0, i * 0.45);
-      this.cancelAnnouncement();
-      this.closingTimer = setTimeout(() => {
-        this.closingTimer = null;
-        this.noise(.07, .12, 0, 2200);
-        this.announce();
-      }, 900);
-    }
   }
+
   announce() {
     if (this.muted || !this.settings.voice) return;
     if (this.sample("closing-en", .5, 0, 1, 2600)) return;
-    if ("speechSynthesis" in window) {
-      const u = new SpeechSynthesisUtterance("It is closing time. Would the last visitor please leave the gallery.");
-      u.lang = "en-US";
-      u.rate = .8;
-      u.pitch = .65;
-      u.volume = .35 * this.settings.volume;
-      window.speechSynthesis.speak(u);
-    }
   }
 
-  update(tension, time, night) {
-    if (time < this.nextHeart) return;
-    this.nextHeart = time + (night ? 0.8 : 1.45 - tension * 0.85);
-    if (tension > 0.05 || night) {
-      this.tone(53, 0.12, 0.1 + tension * 0.23);
-      this.tone(46, 0.16, 0.07 + tension * 0.17, "sine", 0, 0.18);
-    }
-  }
 }

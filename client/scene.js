@@ -3,7 +3,7 @@ import { CONFIG as C } from "../shared/config.js";
 import { sculptureGeometry, detectiveGeometry, detectivePalette, decorateGallery, posterTexture } from "./noir.js";
 import { solids, spots, statues, props, rooms } from "../shared/world.js";
 import { bodyParts, playerBodyParts } from "../shared/body.js";
-import { sunAt } from "../shared/sun.js";
+import { sunAt, lateDayAt } from "../shared/sun.js";
 import { t } from "./i18n.js";
 import { DeathEffects } from "./death.js";
 import { DetectiveSmoke } from "./detective-smoke.js";
@@ -157,10 +157,7 @@ export class Gallery {
     this.scene.add(this.posePreview);
     this.spotHints = new T.Group();
     this.scene.add(this.spotHints);
-    this.markerGroup = new T.Group();
-    this.scene.add(this.markerGroup);
     this.buildHints();
-    this.marksKey = "";
     this.menuMode = true;
     this.effects = [];
     this.gun = this.makeGun();
@@ -559,26 +556,6 @@ export class Gallery {
       this.spotHints.add(l);
     }
   }
-  mark(ids, data, elapsed) {
-    const key = ids.map((id) => `${id}:${data[id]?.triggeredAt ?? "armed"}:${Math.ceil((data[id]?.expiresAt - elapsed) || 0)}`).join(",");
-    if (this.marksKey === key) return;
-    this.marksKey = key;
-    while (this.markerGroup.children.length) {
-      const c = this.markerGroup.children[0];
-      this.markerGroup.remove(c);
-      c.geometry?.dispose();
-      c.material?.map?.dispose();
-      c.material?.dispose();
-    }
-    ids.forEach((id) => {
-      const s = spots[id];
-      const m = data[id];
-      const alert = m?.triggeredAt != null;
-      const l = label(alert ? `! ${id + 1} !` : `${id + 1} / ${Math.max(0, Math.ceil(m.expiresAt - elapsed))}s`, 1.2, 0.24, alert ? "#ffffff" : "#191919", alert ? "#191919" : null);
-      l.position.set(s.x, s.y + 2.2, s.z);
-      this.markerGroup.add(l);
-    });
-  }
   update(
     state,
     role,
@@ -593,7 +570,7 @@ export class Gallery {
     const sunset = state.phase === "SUNSET";
     const sun = sunAt(state.dayTime);
     this.sun.position.set(sun.x, sun.y, sun.z);
-    const late = T.MathUtils.smoothstep(state.dayTime, C.dayDuration-60, C.dayDuration);
+    const late = lateDayAt(state.dayTime);
     const closing = night ? 1 : sunset ? T.MathUtils.smoothstep(state.phaseTime,0,C.sunsetDuration) : 0;
     this.sun.intensity = (3.2 - 2.95*late) * (1-closing);
     this.ambient.intensity = .028*closing;
@@ -706,9 +683,6 @@ export class Gallery {
       c.visible = showSpots || s.id === posePreview?.id;
       if (i % 2) c.lookAt(this.camera.position);
     });
-    this.mark(state.marks, state.markData, state.elapsed);
-    this.markerGroup.visible = !menu && role === "detective";
-    this.markerGroup.children.forEach((m) => m.lookAt(this.camera.position));
     for (let i = this.effects.length - 1; i >= 0; i--) {
       const e = this.effects[i];
       e.life -= dt;
