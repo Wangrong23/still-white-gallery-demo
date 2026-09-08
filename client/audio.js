@@ -1,4 +1,5 @@
 import { gaspAcoustics, spatialAcoustics } from "./acoustics.js";
+import { SFX_MANIFEST } from './audio-manifest.js';
 
 export class Sound {
   constructor() {
@@ -54,8 +55,11 @@ export class Sound {
       this.roomReverb = this.ctx.createConvolver();
       this.roomReverb.normalize = false;
       this.roomReverb.connect(this.master);
-      for (const name of ["heel", "heel-2", "heel-3", "revolver", "plaster", "plaster-2", "bell", "hall-ir", "closing-en"]) {
-        fetch(`/client/assets/${name}.wav`)
+      const samplePaths = { ...Object.fromEntries(
+        ["heel", "heel-2", "heel-3", "revolver", "plaster", "plaster-2", "bell", "hall-ir", "closing-en"]
+          .map(name => [name, `/client/assets/${name}.wav`])), ...SFX_MANIFEST };
+      for (const [name, path] of Object.entries(samplePaths)) {
+        fetch(path)
           .then((r) => { if (!r.ok) throw new Error(name); return r.arrayBuffer(); })
           .then((data) => this.ctx.decodeAudioData(data))
           .then((buffer) => {
@@ -90,7 +94,7 @@ export class Sound {
     const name = index ? `${base}-${index + 1}` : base;
     return this.samples.has(name) ? name : base;
   }
-  sample(name, volume, pan = 0, rate = 1, frequency = 20000) {
+  sample(name, volume, pan = 0, rate = 1, frequency = 20000, options = {}) {
     if (!this.ctx || this.muted) return false;
     const buffer = this.samples.get(name);
     if (!buffer) return false;
@@ -100,7 +104,13 @@ export class Sound {
     filter.frequency.value = frequency;
     source.buffer = buffer;
     source.playbackRate.value = rate;
-    gain.gain.value = volume;
+    const start = this.ctx.currentTime, duration = buffer.duration / rate;
+    const attack = Math.min(options.fadeIn ?? .004, duration / 2);
+    const release = Math.min(options.fadeOut ?? .02, duration / 2);
+    gain.gain.setValueAtTime(0, start);
+    gain.gain.linearRampToValueAtTime(volume, start + attack);
+    gain.gain.setValueAtTime(volume, start + duration - release);
+    gain.gain.linearRampToValueAtTime(0, start + duration);
     p.pan.value = pan;
     const voice = name.startsWith("closing-");
     let highpass, speaker;
@@ -117,7 +127,7 @@ export class Sound {
     filter.connect(gain).connect(p).connect(this.sfx || this.master);
     // Reflections follow the same distance/occlusion gain as the direct sound.
     const reflection = this.ctx.createGain();
-    reflection.gain.value = name.startsWith("heel") ? .055 : voice ? .12 : .16;
+    reflection.gain.value = options.reverb ?? (name.startsWith("heel") ? .055 : voice ? .12 : .16);
     if (this.roomReverb?.buffer) p.connect(reflection).connect(this.roomReverb);
     source.onended = () => {
       source.disconnect(); filter.disconnect(); gain.disconnect(); p.disconnect(); reflection.disconnect();
@@ -125,8 +135,16 @@ export class Sound {
       if (this.announcementSource === source) this.announcementSource = null;
     };
     this.track(source);
-    source.start();
-    return true;
+    source.start(start);
+    // Local breath can be stopped on holding without a discontinuity/click.
+    source.fadeOut = (seconds = .035) => {
+      const now = this.ctx.currentTime;
+      gain.gain.cancelScheduledValues(now);
+      gain.gain.setValueAtTime(gain.gain.value, now);
+      gain.gain.linearRampToValueAtTime(0, now + seconds);
+      source.stop(now + seconds);
+    };
+    return source;
   }
   tone(freq, duration, volume = 0.15, type = "sine", pan = 0, delay = 0, output = this.sfx || this.master) {
     if (!this.ctx || this.muted || volume <= 0) return;
@@ -215,7 +233,8 @@ export class Sound {
     }
     if (e.type === "gasp") {
       const gasp = gaspAcoustics(e, listener);
-      if (gasp.gain > 0) this.noise(0.7, gasp.gain * 0.25, gasp.pan, gasp.frequency);
+      if (gasp.gain > 0 && !this.sample('gasp', gasp.gain * .30, gasp.pan, 1, gasp.frequency, { reverb: .055 }))
+        this.noise(0.7, gasp.gain * 0.25, gasp.pan, gasp.frequency);
     }
     if (e.type === "swipe") this.noise(0.18, 0.3, 0, 3000);
     if (e.type === "shatter" && !this.sample(this.variant("plaster", 2), vol * .5, pan)) this.noise(0.4, vol * 0.5, pan, 4800);

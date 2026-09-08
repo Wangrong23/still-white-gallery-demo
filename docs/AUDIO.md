@@ -115,6 +115,25 @@ unused gameplay parts were removed; the server rejection remains as defense for 
 clients. No other gameplay values changed.
 
 The old killer-wide heartbeat and delayed closing TTS were removed from the game audio
-path. Existing closing speech files have unverified provenance and are not used. Gasp,
-heart, door/relay and siren remain procedural demo sounds. The hall IR remains short;
+path. Existing closing speech files have unverified provenance and are not used. Gasp, local breathing, heart and siren now use edited CC0 Freesound samples.
+Door/relay remain procedural demo sounds. The hall IR remains short;
 longer professionally edited reverb/samples and subjective mix audition are future polish.
+
+
+## CC0 body sounds / siren replacement (2026-09-08)
+
+The exhaustion hiss is replaced by jawbutch’s Male Gasp 1; normal breathing alternates
+two edits from dav0r’s Breathing (male). daandraait’s SLOW HEARTBEAT replaces oscillator
+double beats, and TuneSeeker’s Distant police siren replaces the synthesized support cue.
+All four source pages declare CC0. The publicly available HQ previews were trimmed,
+filtered, faded and peak-normalized to -6dBFS; these are not lossless original downloads.
+See `client/assets/audio/LICENSES.md` for exact source URLs, times and processing.
+
+`SFX_MANIFEST` loads five buffers once per context. Recorded local breath and heart have
+no gallery reverb; recorded gasp retains exactly the existing spatial acoustic rules.
+Holding fades the current breath out in 35ms. Exhaustion interrupts any coincident local
+breath and leaves 1.2s before the next breath, avoiding two overlapping inhalations.
+All gameplay timers, range/occlusion rules, event dedup and music privacy rules are unchanged.
+Missing files still use the existing procedural fallback.
+F2 now also exposes **Gasp**, a local nearby preview of the actual exhaustion sound;
+it does not change breath reserves or send an event to a network room.

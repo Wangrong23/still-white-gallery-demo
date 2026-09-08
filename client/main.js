@@ -716,11 +716,15 @@ function audioDebug(command) {
     }
   }
   if (command === 'Support') sound.support();
+  if (command === 'Gasp') {
+    const listener = { ...state.players[role], yaw: backYaw() };
+    sound.event({ type: 'gasp', x: listener.x, y: (listener.y || 0) + 1.63, z: listener.z }, listener, role);
+  }
 }
 const audioControls = document.createElement('div');
 audioControls.id = 'audio-debug-controls'; audioControls.hidden = true;
 $('debug').after(audioControls);
-for (const command of ['Mute Music','Mute Ambience','Mute Sfx','DAY','T-60','T-10','SUNSET','NIGHT','NIGHT T-10','Wrong Shot','Gunshot','Support']) {
+for (const command of ['Mute Music','Mute Ambience','Mute Sfx','DAY','T-60','T-10','SUNSET','NIGHT','NIGHT T-10','Wrong Shot','Gunshot','Gasp','Support']) {
   const button = document.createElement('button'); button.textContent = command;
   button.onclick = () => audioDebug(command); audioControls.append(button);
 }

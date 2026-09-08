@@ -77,6 +77,10 @@ export class AudioDirector extends Sound {
     const now = this.ctx.currentTime;
     if (e.type === 'shot') { this.shotUntil = now + .4; this.model.hear(.8); }
     if (e.type === 'penalty') { this.vacuumUntil = now + .48; this.penaltyAt = now + .48; }
+    if (e.type === 'gasp' && role === 'killer') {
+      this.stopLocalBreath();
+      this.nextBreath = now + 1.2;
+    }
     if (e.type === 'step' && e.role !== role || e.type === 'gasp') {
       const acoustic = e.type === 'gasp' ? gaspAcoustics(e, listener) : spatialAcoustics(e, listener);
       // Same distance/occlusion as the SFX, and muted SFX cannot be a music radar.
@@ -88,9 +92,14 @@ export class AudioDirector extends Sound {
     if (e.type !== 'phase') super.event(e, listener, role);
   }
   once(key, fn) { if (!this.cues.has(key)) { this.cues.add(key); fn(); } }
+  stopLocalBreath() {
+    try { if (this.selfBreath?.fadeOut) this.selfBreath.fadeOut(); else this.selfBreath?.stop(); } catch {}
+    this.selfBreath = null;
+  }
   support() {
     if (this.supportPlayed || !this.ctx) return;
     this.supportPlayed = true;
+    if (this.sample('siren', .10, -.15, 1, 1400, { fadeIn: 4, fadeOut: 3, reverb: 0 })) return;
     const ctx = this.ctx, source = ctx.createOscillator(), gain = ctx.createGain(), filter = ctx.createBiquadFilter();
     filter.frequency.value = 700; gain.gain.value = 0;
     const t = ctx.currentTime;
@@ -125,10 +134,7 @@ export class AudioDirector extends Sound {
       }
     }
     const normal = ['DAY', 'NIGHT'].includes(state.phase) && active;
-    if (v.holding || !normal) {
-      try { this.selfBreath?.stop(); } catch {}
-      this.selfBreath = null;
-    }
+    if (v.holding || !normal) this.stopLocalBreath();
     automate(this.musicGate.gain, normal ? 1 : 0, this.ctx, normal ? .35 : .1);
     automate(this.musicDuck.gain, now < this.vacuumUntil ? 0 : now < this.shotUntil ? .28 : v.inspecting ? .71 : 1,
       this.ctx, now < this.vacuumUntil || now < this.shotUntil ? .035 : .4);
@@ -158,12 +164,15 @@ export class AudioDirector extends Sound {
     }
     if (normal && v.holding && v.breathDanger > .08 && now >= this.nextHeart) {
       this.nextHeart = now + 1.25 - .55 * v.breathDanger;
-      const level = .015 + .19 * v.breathDanger ** 3;
-      this.tone(53, .12, level); this.tone(46, .15, level * .65, 'sine', 0, .18);
+      if (!this.sample('heartbeat', .03 + .38 * v.breathDanger ** 3, 0, 1, 240, { reverb: 0 })) {
+        const level = .015 + .19 * v.breathDanger ** 3;
+        this.tone(53, .12, level); this.tone(46, .15, level * .65, 'sine', 0, .18);
+      }
     }
     if (normal && !v.holding && now >= this.nextBreath && (role === 'killer' || v.inspecting || v.moving)) {
       this.nextBreath = now + (v.moving ? 1.65 : 3.4);
-      this.selfBreath = this.noise(.65, v.inspecting ? .018 : v.moving ? .025 : .01, 0, 650);
+      this.selfBreath = this.sample(this.variant('breath', 2), v.inspecting ? .055 : v.moving ? .07 : .025,
+        0, 1, 2800, { reverb: 0 }) || this.noise(.65, v.inspecting ? .018 : v.moving ? .025 : .01, 0, 650);
     }
   }
   debugText() {

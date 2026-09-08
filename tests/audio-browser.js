@@ -1,6 +1,7 @@
 import { AudioDirector } from '../client/audio-director.js';
 import { Game } from '../shared/game.js';
 import { MusicDirector } from '../client/music-director.js';
+import { SFX_MANIFEST } from '../client/audio-manifest.js';
 const report=document.querySelector('#report'), button=document.querySelector('#run');
 const lines=[];
 const log=text=>{lines.push(text);report.textContent=lines.join('\n');};
@@ -17,6 +18,13 @@ button.onclick=async()=>{
     check(clients.every(a=>a.ctx.state==='running') && clients[0].ctx!==clients[1].ctx,'independent contexts start after click');
     for(let n=0;n<200 && !clients.every(a=>a.music.loaded.day && a.music.loaded.night);n++)await sleep(50);
     check(clients.every(a=>a.music.loaded.day && a.music.loaded.night),'MP3 / OGG decode successfully');
+    for(let n=0;n<100 && !clients.every(a=>Object.keys(SFX_MANIFEST).every(key=>a.samples.has(key)));n++)await sleep(50);
+    check(clients.every(a=>Object.keys(SFX_MANIFEST).every(key=>a.samples.has(key))),'all five edited CC0 effect buffers decode successfully');
+    const recorded=[{},{}];
+    clients.forEach((a,i)=>{
+      const play=a.sample.bind(a);
+      a.sample=(name,...args)=>{const voice=play(name,...args);if(voice)recorded[i][name]=(recorded[i][name]||0)+1;return voice;};
+    });
     const fallback = new MusicDirector(clients[0], clients[0].musicGate, {day:'data:audio/wav;base64,AA==',night:'data:audio/wav;base64,AA=='});
     await sleep(200);
     check(fallback.loaded.day===false && fallback.loaded.night===false && fallback.layers.day.source.buffer.length>0,'invalid/missing audio retains procedural buffers');
@@ -63,6 +71,7 @@ button.onclick=async()=>{
     check(phases.size===5 && game.state.result==='SURVIVED','complete default round reaches SURVIVED on both clients');
     check(sunsetChecks>35,'SUNSET music gate stays exactly zero throughout transition');
     check(clients.every(a=>a.supportPlayed),'support siren triggered exactly once per client');
+    check(recorded.every(counts=>counts.siren===1),'support uses the recorded siren, not the oscillator fallback');
     check(worstPeak<.95,`no pre-compressor clipping; measured peak ${worstPeak.toFixed(4)}`);
     check(maxSources<24,`bounded one-shot voices: maximum ${maxSources}`);
     // Exercise the actual breath state machine and real voices through exhaustion.
@@ -82,6 +91,8 @@ button.onclick=async()=>{
     }
     check(gaspIds.size===1 && game.state.players.killer.cooldown>0,'15-second exhaustion emits one spatial gasp and enters cooldown');
     check(warning && heart && clients[0].debugState.breathDanger===0,'killer heart/tinnitus stay local and disappear after release');
+    check(recorded.every(counts=>counts.gasp===1),'each client plays exactly one recorded gasp');
+    check(recorded[1].heartbeat>0 && !recorded[0].heartbeat,'recorded heartbeat remains killer-local');
     await sleep(1500);
     clients.forEach(a=>a.stop());
     check(clients.every(a=>a.activeSources.size===0),'return to menu stops active one-shots');
