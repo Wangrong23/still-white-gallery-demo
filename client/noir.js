@@ -1,11 +1,21 @@
 import * as T from "three";
 import { noirMeshes } from "./assets/noir-meshes.js";
+import { detectiveMeshes } from "./assets/detective-meshes.js";
+export { detectivePalette } from "./assets/detective-meshes.js";
 
 // Shared templates: the killer and every intact decoy use identical geometry.
 export const sculptureGeometry = Object.fromEntries(Object.entries(noirMeshes).map(([name, data]) => {
   const geometry = new T.BufferGeometry();
   geometry.setAttribute("position", new T.Float32BufferAttribute(data.positions, 3));
   geometry.setAttribute("normal", new T.Float32BufferAttribute(data.normals, 3));
+  return [name, geometry];
+}));
+
+export const detectiveGeometry = Object.fromEntries(Object.entries(detectiveMeshes).map(([name, data]) => {
+  const geometry = new T.BufferGeometry();
+  geometry.setAttribute("position", new T.Float32BufferAttribute(data.positions, 3));
+  geometry.setAttribute("normal", new T.Float32BufferAttribute(data.normals, 3));
+  for (const group of data.groups) geometry.addGroup(group.start, group.count, group.materialIndex);
   return [name, geometry];
 }));
 

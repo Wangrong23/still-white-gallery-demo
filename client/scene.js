@@ -1,11 +1,12 @@
 import * as T from "three";
 import { CONFIG as C } from "../shared/config.js";
-import { sculptureGeometry, decorateGallery, posterTexture } from "./noir.js";
+import { sculptureGeometry, detectiveGeometry, detectivePalette, decorateGallery, posterTexture } from "./noir.js";
 import { solids, spots, statues, props, rooms } from "../shared/world.js";
 import { bodyParts, playerBodyParts } from "../shared/body.js";
 import { sunAt } from "../shared/sun.js";
 import { t } from "./i18n.js";
 import { DeathEffects } from "./death.js";
+import { DetectiveSmoke } from "./detective-smoke.js";
 
 // Three's default Toon ramp illuminates even negative N·L at 70% strength.
 // An unlit wall and an occluded figure must instead share a black endpoint.
@@ -31,6 +32,9 @@ function softenShadows(material) {
   return material;
 }
 [ink, white, gray].forEach(softenShadows);
+const detectiveMaterials = detectivePalette.map(color => softenShadows(
+  new T.MeshToonMaterial({ color, gradientMap: shadowRamp, shadowSide: T.BackSide }),
+));
 const lineMat = new T.LineBasicMaterial({
   color: 0x292929,
   transparent: true,
@@ -142,6 +146,7 @@ export class Gallery {
     };
     Object.values(this.actors).forEach((a) => this.scene.add(a));
     this.deaths = new DeathEffects(this.scene);
+    this.detectiveSmoke = new DetectiveSmoke(this.scene);
     this.posePreview = this.makeActor(false);
     const previewMaterial = new T.MeshBasicMaterial({ color: 0x555555,
       transparent: true, opacity: .24, depthWrite: false });
@@ -462,26 +467,18 @@ export class Gallery {
     a.userData.parts = [];
     for (const part of bodyParts("stand", 0, 0, detective)) {
       const key = part.name === "hat" && part.h > .1 ? "crown" : part.name;
-      const m = new T.Mesh(sculptureGeometry[key], detective && part.name !== "head" ? ink : white);
+      const m = new T.Mesh(detective ? detectiveGeometry[key] : sculptureGeometry[key],
+        detective ? detectiveMaterials : white);
       m.castShadow = true;
       m.receiveShadow = true;
       a.add(m);
       a.userData.parts.push(m);
-      if (detective && part.name === "torso") {
-        for (const side of [-1, 1]) {
-          const lapel = cube(.16, .58, .04, gray, false);
-          lapel.position.set(side * .18, .13, -.48);
-          lapel.rotation.z = side * -.3;
-          m.add(lapel);
-        }
-      }
-      if (detective && part.name === "coat") {
-        const belt = cube(.76,.065,.77,gray,false);
-        belt.position.y = .16; m.add(belt);
-        for (const side of [-1,1]) for (const y of [-.18,.02]) {
-          const button = cube(.025,.025,.035,gray,false);
-          button.position.set(side*.17,y,-.44); m.add(button);
-        }
+      if (detective && part.name === "head") {
+        a.userData.head = m;
+        const cigarette = new T.Mesh(detectiveGeometry.cigarette, detectiveMaterials);
+        cigarette.castShadow = true;
+        cigarette.receiveShadow = true;
+        m.add(cigarette);
       }
     }
     const face = new T.Group();
@@ -496,6 +493,7 @@ export class Gallery {
     mouth.position.set(0, -0.071, -0.147);
     face.add(mouth);
     a.userData.mouth = mouth;
+    face.visible = !detective; // Detective facial features are authored into its Blender head mesh.
     return a;
   }
   poseActor(a, p, time) {
@@ -721,6 +719,8 @@ export class Gallery {
         this.effects.splice(i, 1);
       }
     }
+    this.detectiveSmoke.update(this.actors.detective.userData.head, state.players.detective,
+      dt, state.elapsed, menu);
     this.renderer.render(this.scene, this.camera);
   }
   shot(point, surface) {

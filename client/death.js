@@ -8,7 +8,7 @@ const smooth = (t) => { t = T.MathUtils.clamp(t, 0, 1); return t * t * (3 - 2 * 
 // A short recoil becomes a fall; limbs relax from the exact struck pose.
 export function fallenPose(p, age) {
   const t = smooth(age / 1.05), relax = smooth(age / .7);
-  const rest = bodyParts("stand", 0, 0, p.role === "detective");
+  const rest = bodyParts("stand", 0, 0, p.role === "detective", { relaxedArms: true });
   const parts = p.death.parts.map((part, i) => {
     const out = { ...part };
     for (const key of ["x", "y", "z", "rx", "rz"])

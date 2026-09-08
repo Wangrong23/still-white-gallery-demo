@@ -30,38 +30,45 @@ export function bodyParts(pose = 'stand', motion = 0, breath = 0, detective = fa
   }
   const blend = options.blend ?? (motion ? 1 : 0);
   const phase = options.phase ?? Math.asin(clamp(motion / .6, -1, 1));
-  const sway = Math.sin(phase) * .012 * blend + (options.turn || 0) * .025;
+  const weight = detective && !options.relaxedArms ? .035 * (1 - blend) : 0;
+  const sway = weight + Math.sin(phase) * .012 * blend + (options.turn || 0) * .025;
   const drop = .06 * blend;
   const hip = s.hip - drop, torso = s.torso - drop, head = s.head - drop;
   const parts = [
-    { name: 'torso', x: sway, y: torso + breath, z: 0, w: detective ? .58 : .4, h: .61, d: .25 },
-    { name: 'head', x: sway, y: head + breath, z: 0, w: .3, h: .37, d: .3, round: true },
+    { name: 'torso', x: sway, y: torso + breath, z: 0, w: detective ? .62 : .4, h: .61, d: detective ? .34 : .25 },
+    { name: 'head', x: sway, y: head + breath, z: 0, w: detective ? .36 : .3, h: detective ? .4 : .37, d: detective ? .38 : .3, round: true },
     { name: 'hips', x: 0, y: hip, z: 0, w: .36, h: .24, d: .26 },
   ];
+  let gunHand = null;
   for (const side of [-1, 1]) {
     const swing = Math.sin(phase) * blend;
     const shoulder = { x: sway + side * (detective ? .255 : .18), y: torso + .18 + breath, z: 0 };
-    const armX = s.forward + swing * side * .42;
-    const armZ = side * (s.arm + s.asymmetry * side);
-    const elbow = limb(parts, 'arm', shoulder, .32, .145, .15, armX, armZ);
-    limb(parts, 'arm', elbow, .34, .13, .14, armX + s.elbow, armZ);
+    const holdingGun = detective && side === 1 && !options.relaxedArms;
+    const armX = holdingGun ? -.12 + swing * .07 : s.forward + swing * side * .42;
+    const armZ = holdingGun ? -.12 : side * (s.arm + s.asymmetry * side);
+    const elbow = limb(parts, 'arm', shoulder, .32, detective ? .21 : .145, detective ? .22 : .15, armX, armZ);
+    const hand = limb(parts, 'arm', elbow, .34, detective ? .18 : .13, detective ? .19 : .14,
+      armX + (holdingGun ? 1.48 : s.elbow), armZ);
+    if (detective && side === 1) gunHand = hand;
     // Two-bone leg solve keeps knees attached and feet on the pose's floor.
     const legPhase = phase + (side < 0 ? Math.PI : 0);
     const ankleY = s.ankleY + Math.max(0, -Math.sin(legPhase)) * .10 * blend;
-    const ankleZ = s.ankleZ - Math.cos(legPhase) * .30 * blend;
+    const ankleZ = s.ankleZ - Math.cos(legPhase) * .30 * blend
+      + (detective ? side * .055 * (1 - blend) : 0);
     const dy = hip - ankleY, dz = ankleZ;
     const reach = clamp(Math.hypot(dy, dz), .001, .7999);
     const aim = Math.atan2(-dz, dy);
     const bend = Math.acos(clamp(reach / .8, -1, 1));
     const knee = limb(parts, 'leg', { x: side * .105, y: hip, z: 0 }, .4, .16, .18, aim + bend);
     const ankle = limb(parts, 'leg', knee, .4, .14, .16, aim - bend);
-    parts.push({ name: 'foot', x: ankle.x, y: ankle.y - .04, z: ankle.z - .055, w: .17, h: .12, d: .28 });
+    parts.push({ name: 'foot', x: ankle.x, y: ankle.y - .04, z: ankle.z - .055, w: detective ? .23 : .17, h: .12, d: detective ? .36 : .28 });
   }
   if (detective) {
-    parts.push({ name: 'coat', x: sway * .5, y: .76 - drop, z: 0, w: .64, h: .9, d: .36 });
-    parts.push({ name: 'hat', x: sway, y: 1.88 - drop, z: 0, w: .58, h: .09, d: .48 });
-    parts.push({ name: 'hat', x: sway, y: 1.98 - drop, z: 0, w: .35, h: .2, d: .32 });
-    parts.push({ name: 'gun', x: sway + .35, y: 1.1 - drop, z: -.42, w: .085, h: .1, d: .53 });
+    parts.push({ name: 'coat', x: sway * .5, y: .91 - drop, z: 0, w: .68, h: 1.2, d: .4 });
+    parts.push({ name: 'hat', x: sway, y: 1.79 - drop, z: 0, w: .7, h: .10, d: .57 });
+    parts.push({ name: 'hat', x: sway, y: 1.91 - drop, z: 0, w: .41, h: .24, d: .38 });
+    parts.push({ name: 'gun', x: gunHand.x, y: gunHand.y + .024, z: gunHand.z - .1643,
+      w: .11, h: .2, d: .43 });
   }
   if (pose === 'wall' || options.poseFrom === 'wall') {
     const t = options.poseFrom && options.poseMix < 1 ? options.poseMix : 1;
