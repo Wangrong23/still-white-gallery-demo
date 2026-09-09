@@ -32,6 +32,23 @@ function softenShadows(material, floor = shadowFloor) {
   material.customProgramCacheKey = () => "shared-shadow-floor-v1";
   return material;
 }
+// Local daylight concealment cue, evaluated per fragment so a shadow boundary
+// turns only the shaded part of the body into a translucent rim.
+function ghostInShadow(material) {
+  material.transparent = true;
+  material.depthWrite = false;
+  material.onBeforeCompile = shader => {
+    shader.fragmentShader = shader.fragmentShader.replace('#include <opaque_fragment>', `
+      float concealment = 1.0 - smoothstep(0.025, 0.18, max(outgoingLight.r, max(outgoingLight.g, outgoingLight.b)));
+      float rim = pow(1.0 - abs(dot(normalize(normal), normalize(vViewPosition))), 1.5);
+      outgoingLight = mix(outgoingLight, vec3(0.20 + 0.60 * rim), concealment);
+      diffuseColor.a *= mix(1.0, 0.10 + 0.72 * rim, concealment);
+      #include <opaque_fragment>
+    `);
+  };
+  material.customProgramCacheKey = () => 'local-shadow-ghost-v1';
+  return material;
+}
 [ink, white, gray].forEach(material => softenShadows(material));
 const detectiveMaterials = detectivePalette.map(color => softenShadows(
   new T.MeshToonMaterial({ color, gradientMap: shadowRamp, shadowSide: T.BackSide }),
@@ -590,10 +607,11 @@ export class Gallery {
       if (!o.isMesh || !o.material.emissive) return;
       if (!o.userData.baseMaterial) {
         o.userData.baseMaterial=o.material;
-        o.userData.selfMaterial=softenShadows(o.material.clone(), { value: .085 });
-        o.userData.selfMaterial.emissive.set(0x000000);
+        o.userData.selfMaterial=softenShadows(o.material.clone());
+        o.userData.selfMaterial.emissive.set(0x4b4b4b);
+        o.userData.dayGhostMaterial=ghostInShadow(o.material.clone());
       }
-      o.material = role === "killer" && !menu ? o.userData.selfMaterial : o.userData.baseMaterial;
+      o.material = role === "killer" && !menu ? (night ? o.userData.selfMaterial : o.userData.dayGhostMaterial) : o.userData.baseMaterial;
     });
     this.scene.fog.color.copy(this.scene.background);
     this.gate.visible = state.phase === "PREPARATION";
@@ -651,7 +669,7 @@ export class Gallery {
         fallen ? .65 : (p.y || 0) + (p.pose === "sit" ? .65 : 1.4),
         followed.z + (fallen ? fallen.death.direction.z * .7 : 0),
       );
-      let distance = 3.05;
+      let distance = !fallen && p.still && p.spotId != null ? 3.75 : 3.05;
       const back = dir.clone().negate();
       if (fallen) {
         // A side view keeps the attacker from obscuring the falling victim.
@@ -662,10 +680,10 @@ export class Gallery {
       this.world.updateMatrixWorld();
       this.cameraRay.set(target, back);
       this.cameraRay.near = 0.1;
-      this.cameraRay.far = 3.1;
+      this.cameraRay.far = distance + .05;
       const hit = this.cameraRay.intersectObjects(this.blockers.filter((b) => b.visible), true)
         .find((h) => h.object.isMesh);
-      if (hit) distance = Math.max(0.18, hit.distance - 0.16);
+      if (hit) distance = Math.min(distance, Math.max(0.18, hit.distance - 0.16));
       this.cameraDistance = distance < this.cameraDistance ? distance
         : this.cameraDistance + (distance - this.cameraDistance) * (1 - Math.exp(-dt * 10));
       this.camera.position.copy(target).addScaledVector(back, this.cameraDistance);
