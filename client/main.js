@@ -1,3 +1,4 @@
+import { resultNarrative } from "./narrative.js";
 import { MovementPrediction } from "./prediction.js";
 import { Gallery } from "./scene.js";
 import { Game } from "../shared/game.js";
@@ -138,7 +139,7 @@ function connectionStatus(key, blocked, terminal = false) {
     $("replay").textContent = t("replay");
     if (state.phase === "GAME_OVER") {
       $("pause").hidden = true;
-      $("result-copy").textContent = t(key);
+      $("result-status").textContent = t(key);
     }
   } else {
     $("network-status").textContent = t(key);
@@ -537,25 +538,12 @@ function hud(now) {
       $("pause").hidden = true;
       $("results").hidden = true;
       phaseUntil = 0;
-      const result = s.result;
-      $("result-title").textContent =
-        result === "KILLER ESCAPED" ? t("escaped") : result === "FOUND YOU"
-          ? t("foundYou")
-          : result === "ESCAPED"
-            ? t("escaped")
-            : result === "SURVIVED"
-              ? t("survived")
-              : t("detected");
-      $("winner").textContent =
-        t(["FOUND YOU", "KILLER ESCAPED"].includes(result) ? "killerWins" : "detectiveWins");
-      $("result-copy").textContent =
-        result === "KILLER ESCAPED" ? t("resultKillerEscaped") : result === "FOUND YOU"
-          ? t("resultFound")
-          : result === "ESCAPED"
-            ? t("resultEscaped")
-            : result === "SURVIVED"
-              ? t("resultSurvived")
-              : t("resultDetected");
+      const ending = resultNarrative(s.result, role, language);
+      $("result-title").textContent = ending.title;
+      $("winner").textContent = ending.label;
+      $("result-copy").textContent = ending.body;
+      $("result-outcome").textContent = ending.outcome;
+      $("result-status").textContent = "";
     }
   }
   if (s.phase === "GAME_OVER") {
