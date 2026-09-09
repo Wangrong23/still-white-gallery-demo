@@ -1,3 +1,4 @@
+import { ConcealmentMask } from './concealment.js';
 import { SculptureSurface } from './sculpture-surface.js';
 import * as T from "three";
 import { CONFIG as C } from "../shared/config.js";
@@ -34,19 +35,25 @@ function softenShadows(material, floor = shadowFloor) {
 }
 // Local daylight concealment cue, evaluated per fragment so a shadow boundary
 // turns only the shaded part of the body into a translucent rim.
-function ghostInShadow(material) {
+function ghostInShadow(material, mask) {
   material.transparent = true;
   material.depthWrite = false;
   material.onBeforeCompile = shader => {
+    Object.assign(shader.uniforms,mask.uniforms);
+    shader.uniforms.shadowFloor = shadowFloor;
+    shader.vertexShader = 'uniform mat4 concealmentMatrix; varying vec4 coverCoord;\n' + shader.vertexShader;
+    shader.vertexShader = shader.vertexShader.replace('#include <project_vertex>', '#include <project_vertex>\ncoverCoord = concealmentMatrix * modelMatrix * vec4(transformed, 1.0);');
+    shader.fragmentShader = 'uniform sampler2D concealmentMap; uniform float shadowFloor; varying vec4 coverCoord;\n' + shader.fragmentShader;
     shader.fragmentShader = shader.fragmentShader.replace('#include <opaque_fragment>', `
-      float concealment = 1.0 - smoothstep(0.025, 0.18, max(outgoingLight.r, max(outgoingLight.g, outgoingLight.b)));
+      float cover = getShadow(concealmentMap, vec2(1024.0), 1.0, -0.0003, 1.0, coverCoord);
+      float concealment = 1.0 - smoothstep(0.15, 0.85, cover);
       float rim = pow(1.0 - abs(dot(normalize(normal), normalize(vViewPosition))), 1.5);
-      outgoingLight = mix(outgoingLight, vec3(0.20 + 0.60 * rim), concealment);
+      outgoingLight = mix(max(outgoingLight, vec3(shadowFloor)), vec3(0.20 + 0.60 * rim), concealment);
       diffuseColor.a *= mix(1.0, 0.10 + 0.72 * rim, concealment);
       #include <opaque_fragment>
     `);
   };
-  material.customProgramCacheKey = () => 'local-shadow-ghost-v1';
+  material.customProgramCacheKey = () => 'environment-shadow-ghost-v2';
   return material;
 }
 [ink, white, gray].forEach(material => softenShadows(material));
@@ -156,6 +163,7 @@ export class Gallery {
     this.wrecks = [];
     this.buildWorld();
     this.batchOutlines();
+    this.concealment = new ConcealmentMask(this.world,this.sun);
     this.cameraRay = new T.Raycaster();
     this.cameraDistance = 3.05;
     this.actors = {
@@ -609,7 +617,7 @@ export class Gallery {
         o.userData.baseMaterial=o.material;
         o.userData.selfMaterial=softenShadows(o.material.clone());
         o.userData.selfMaterial.emissive.set(0x4b4b4b);
-        o.userData.dayGhostMaterial=ghostInShadow(o.material.clone());
+        o.userData.dayGhostMaterial=ghostInShadow(o.material.clone(),this.concealment);
       }
       o.material = role === "killer" && !menu ? (night ? o.userData.selfMaterial : o.userData.dayGhostMaterial) : o.userData.baseMaterial;
     });
@@ -722,6 +730,7 @@ export class Gallery {
     }
     this.detectiveSmoke.update(this.actors.detective.userData.head, state.players.detective,
       dt, state.elapsed, menu);
+    if (role === "killer" && !menu && !night) this.concealment.update(this.renderer,this.sun);
     this.renderer.render(this.scene, this.camera);
   }
   shot(point, surface) {
