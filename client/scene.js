@@ -193,9 +193,11 @@ export class Gallery {
     this.resize();
   }
   resize() {
-    this.camera.aspect = innerWidth / innerHeight;
+    const stage = document.getElementById("game-stage");
+    const width = stage?.clientWidth || innerWidth, height = stage?.clientHeight || innerHeight;
+    this.camera.aspect = width / height;
     this.camera.updateProjectionMatrix();
-    this.renderer.setSize(innerWidth, innerHeight);
+    this.renderer.setSize(width, height);
   }
   configure(settings) {
     const scale = settings.quality === "performance" ? Math.min(devicePixelRatio * .75, 1)

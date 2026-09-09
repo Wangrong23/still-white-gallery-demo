@@ -1,3 +1,9 @@
+import { BINDINGS } from "../shared/config.js";
+import { keyLabel } from "./bindings.js";
+let touchControls = false;
+export function setTouchControls(value) { touchControls = value; }
+let controlBindings = { ...BINDINGS };
+export function setControlBindings(value) { controlBindings = { ...value }; }
 const copy = {
   zh: {
     title: "别动：白色展馆",
@@ -65,24 +71,24 @@ const copy = {
     breathCooldown: "喘息未定 · {seconds} 秒",
     breathSettling: "稳住呼吸",
     breathLow: "快憋不住了",
-    breathRelease: "先松开空格，等气息恢复再按",
+    breathRelease: "先松开{breath}，等气息恢复再按",
     breathMinimum: "再缓一缓，气息还没恢复",
-    breathStillFirst: "停步片刻站定 · 空格屏息",
-    breathReady: "按住空格，屏住呼吸",
-    breathReleaseSoon: "松开空格。别让他听见。",
+    breathStillFirst: "停步片刻站定 · {breath}屏息",
+    breathReady: "按住{breath}，屏住呼吸",
+    breathReleaseSoon: "松开{breath}。别让他听见。",
     breathHoldingHint: "别让呼吸出卖你。",
     breathAmount: "{seconds} 秒",
     room_0: "白厅", room_1: "雕塑厅", room_2: "西画廊", room_3: "天窗厅", room_4: "东画廊",
     inspectionPressure: "他在辨认你。屏住呼吸，或离开他的视线。",
 
     breath: "呼吸",
-    breathPrompt: "他靠近了 · 按住空格屏息",
+    breathPrompt: "他靠近了 · 按住{breath}屏息",
     nightDetective: "灯怎么灭了。",
     nightKiller: "他也看不清了。",
-    detectiveControls: "按住 E 辨认<br>R 回头 · 右键举枪 · 左键开火",
-    killerControls: "停步站定 · F 贴墙 / 摆出姿势<br>空格屏息 · WASD 起身移动 · Shift 短跑",
+    detectiveControls: "按住 {still} 辨认<br>{lookBack} 回头 · 右键举枪 · 左键开火",
+    killerControls: "停步站定 · {poseKey} 贴墙 / 摆出姿势<br>{breath}屏息 · {move} 起身移动 · {sprint} 短跑",
     attack: "左键 · 动手",
-    enterPose: "F · {pose}",
+    enterPose: "{poseKey} · {pose}",
     pose_thinker: "思想者式托腮", pose_victory: "胜利女神式展臂", pose_venus: "藏臂维纳斯",
     pose_david: "大卫式立姿", pose_discobolus: "掷铁饼式蓄势", pose_liberty: "自由女神式举臂",
     pose_stand: "站定", pose_statue: "立像", pose_wall: "贴墙", pose_sit: "坐下",
@@ -99,18 +105,18 @@ const copy = {
     findExit: "还可以开枪追捕，或从南门灯光处撤离。支援将在 45 秒后抵达。",
     huntTime: "近身伏击警探，或从南门灯光处脱身。支援将在 45 秒后抵达。",
     emptyShot: "不是他。离日落又近了 25 秒。",
-    inspectHint: "站稳，按住 E 辨认。",
-    inspecting: "按住 E · 再看仔细些 {percent}%",
+    inspectHint: "站稳，按住 {still} 辨认。",
+    inspecting: "按住 {still} · 再看仔细些 {percent}%",
     inspected: "只是石膏。",
-    noAmmo: "空了。靠近目标，按住 E 辨认。",
-    noAmmoNight: "枪里空了。F 打开手电，往南门走。",
+    noAmmo: "空了。靠近目标，按住 {still} 辨认。",
+    noAmmoNight: "枪里空了。{flashlight} 打开手电，往南门走。",
     gasp: "没憋住。先缓口气。",
     timeout: "等得太久，连接没有回应。请重试。",
     connectFailed: "暂时连不上，请稍后再试。",
     serverFull: "服务器房间已满，请稍后重试。",
     roomUnavailable: "房间不存在、已满或游戏已经开始。",
     invalidRequest: "请求格式无效。",
-    help: `<p><strong>先记住这几件事</strong><br><kbd>W A S D</kbd> 移动 · 鼠标观察 · <kbd>Esc</kbd> 释放鼠标或打开菜单。</p><p><strong>警探</strong><br>左键射击 · 右键举枪<br>白天靠近并瞄准目标，站定按住 <kbd>E</kbd> 检查：正常呼吸的来客约 1.2 秒暴露；屏息来客和假人需要持续检查约 3.6 秒。抓捕或排除均不消耗子弹。移动、移开瞄准或松手会中断<br>按住 <kbd>R</kbd> 快速回头 · <kbd>F</kbd> 夜间手电。</p><p><strong>来客</strong><br><kbd>Shift</kbd> 短跑 · 停止移动 0.6 秒自动站定，观察不打断；朝向锁定，身体与影子仍可见<br>靠近墙面或特殊藏点会显示半透明姿势预览，<kbd>F</kbd> 平滑融入该位置；重新按移动键也能解除静止。若静止前已按住移动键，先松开再按<br>按住 <kbd>Space</kbd> 屏息（最多 15 秒），剩余 3 秒时预警；松开 1 秒后回气，空条回满需要 12 秒。耗尽会喘气并冷却 5 秒，必须松开空格、恢复至少 3 秒气量才能再次按下使用。屏息能拖住他，但一直被盯着，终究会露出破绽。<br>夜间左键袭击。</p><p>静止不会消除你的影子。观察太阳，趁警探转身换位。白昼持续 5 分钟。误射会让日落提前 25 秒；假人中弹会碎裂，留下本局可见的残骸。日落后警探可继续射击追捕或从南门撤离；来客可近身伏击或从南门脱身。任一方抵达出口即结束本局；45 秒后支援抵达，仍存活的警探胜利。</p><details><summary>演练工具</summary><p><kbd>Tab</kbd> 切换角色 · <kbd>F2</kbd> 调试信息 · <kbd>F3</kbd> 推进 45 秒<br><kbd>F4</kbd> 日落 · <kbd>F6</kbd> 夜晚 · <kbd>F7</kbd> 补弹<br><kbd>F8</kbd> 所有藏点 · <kbd>F9</kbd> 开关陪练。</p></details>`,
+    help: `<p><strong>先记住这几件事</strong><br><kbd>{move}</kbd> 移动 · 鼠标观察 · <kbd>Esc</kbd> 释放鼠标或打开菜单。</p><p><strong>警探</strong><br>左键射击 · 右键举枪<br>白天靠近并瞄准目标，站定按住 <kbd>{still}</kbd> 检查：正常呼吸的来客约 1.2 秒暴露；屏息来客和假人需要持续检查约 3.6 秒。抓捕或排除均不消耗子弹。移动、移开瞄准或松手会中断<br>按住 <kbd>{lookBack}</kbd> 快速回头 · <kbd>{flashlight}</kbd> 夜间手电。</p><p><strong>来客</strong><br><kbd>{sprint}</kbd> 短跑 · 停止移动 0.6 秒自动站定，观察不打断；朝向锁定，身体与影子仍可见<br>靠近墙面或特殊藏点会显示半透明姿势预览，<kbd>{poseKey}</kbd> 平滑融入该位置；重新按移动键也能解除静止。若静止前已按住移动键，先松开再按<br>按住 <kbd>{breath}</kbd> 屏息（最多 15 秒），剩余 3 秒时预警；松开 1 秒后回气，空条回满需要 12 秒。耗尽会喘气并冷却 5 秒，必须松开{breath}、恢复至少 3 秒气量才能再次按下使用。屏息能拖住他，但一直被盯着，终究会露出破绽。<br>夜间左键袭击。</p><p>静止不会消除你的影子。观察太阳，趁警探转身换位。白昼持续 5 分钟。误射会让日落提前 25 秒；假人中弹会碎裂，留下本局可见的残骸。日落后警探可继续射击追捕或从南门撤离；来客可近身伏击或从南门脱身。任一方抵达出口即结束本局；45 秒后支援抵达，仍存活的警探胜利。</p><details><summary>演练工具</summary><p><kbd>Tab</kbd> 切换角色 · <kbd>F2</kbd> 调试信息 · <kbd>F3</kbd> 推进 45 秒<br><kbd>F4</kbd> 日落 · <kbd>F6</kbd> 夜晚 · <kbd>F7</kbd> 补弹<br><kbd>F8</kbd> 所有藏点 · <kbd>F9</kbd> 开关陪练。</p></details>`,
   },
   en: {
     backupApproaching: "BACKUP EN ROUTE",
@@ -178,24 +184,24 @@ const copy = {
     breathCooldown: "CATCH YOUR BREATH · {seconds}s",
     breathSettling: "STEADY NOW",
     breathLow: "ALMOST OUT OF BREATH",
-    breathRelease: "Release Space. Let your breath return before pressing again.",
+    breathRelease: "Release {breath}. Let your breath return before pressing again.",
     breathMinimum: "A little longer. Your breath has not returned.",
-    breathStillFirst: "Pause to stand still · Space to hold breath",
-    breathReady: "Hold Space. Hold your breath.",
-    breathReleaseSoon: "Release Space. Don't let him hear you.",
+    breathStillFirst: "Pause to stand still · {breath} to hold breath",
+    breathReady: "Hold {breath}. Hold your breath.",
+    breathReleaseSoon: "Release {breath}. Don't let him hear you.",
     breathHoldingHint: "Don't let your breath give you away.",
     breathAmount: "{seconds}s",
     room_0: "WHITE HALL", room_1: "FIGURE STUDIES", room_2: "WEST GALLERY", room_3: "THE SKYLIGHT", room_4: "EAST GALLERY",
     inspectionPressure: "He's studying you. Hold your breath, or break his line of sight.",
 
     breath: "BREATH",
-    breathPrompt: "He's close · Hold SPACE to quiet your breathing",
+    breathPrompt: "He's close · Hold {breath} to quiet your breathing",
     nightDetective: "WHO CUT THE LIGHTS?",
     nightKiller: "HE CAN'T SEE EITHER.",
-    detectiveControls: "HOLD E TO EXAMINE<br>R LOOK BACK · RIGHT CLICK AIM · LEFT CLICK FIRE",
-    killerControls: "PAUSE TO SETTLE · F LEAN / POSE<br>SPACE HOLD BREATH · WASD MOVE · SHIFT RUN",
+    detectiveControls: "HOLD {still} TO EXAMINE<br>{lookBack} LOOK BACK · RIGHT CLICK AIM · LEFT CLICK FIRE",
+    killerControls: "PAUSE TO SETTLE · {poseKey} LEAN / POSE<br>{breath} HOLD BREATH · {move} MOVE · {sprint} RUN",
     attack: "LEFT CLICK · STRIKE",
-    enterPose: "F · {pose}",
+    enterPose: "{poseKey} · {pose}",
     pose_thinker: "THE THINKER", pose_victory: "WINGED VICTORY", pose_venus: "VENUS — ARMS CONCEALED",
     pose_david: "DAVID", pose_discobolus: "DISCUS THROWER", pose_liberty: "LIBERTY",
     pose_stand: "STAND", pose_statue: "STATUE", pose_wall: "LEAN ON WALL", pose_sit: "SIT",
@@ -212,25 +218,40 @@ const copy = {
     findExit: "Keep shooting, or withdraw through the lit south door. Backup arrives in 45 seconds.",
     huntTime: "Ambush the detective, or escape through the lit south door. Backup arrives in 45 seconds.",
     emptyShot: "Not him. Sunset is 25 seconds closer.",
-    inspectHint: "Keep still. Hold E to examine.",
-    inspecting: "HOLD E · LOOK CLOSER {percent}%",
+    inspectHint: "Keep still. Hold {still} to examine.",
+    inspecting: "HOLD {still} · LOOK CLOSER {percent}%",
     inspected: "Only plaster.",
-    noAmmo: "Empty. Get close and hold E to examine.",
-    noAmmoNight: "Empty. F for the flashlight. Make for the south door.",
+    noAmmo: "Empty. Get close and hold {still} to examine.",
+    noAmmoNight: "Empty. {flashlight} for the flashlight. Make for the south door.",
     gasp: "Too long. Catch your breath.",
     timeout: "Connection timed out. Make sure the server is running.",
     connectFailed: "Could not connect to the two-player server. Refresh and try again.",
     serverFull: "The server is full. Try again later.",
     roomUnavailable: "The room does not exist, is full, or has already started.",
     invalidRequest: "Invalid request.",
-    help: `<p><strong>SHARED CONTROLS</strong><br><kbd>W A S D</kbd> Move · Mouse to look · <kbd>Esc</kbd> Release the pointer or open the menu.</p><p><strong>DETECTIVE</strong><br>Left click to shoot · Right click to aim<br>In daylight, stand near a figure, aim and hold <kbd>E</kbd>: a breathing visitor is exposed in about 1.2s; a breath-holding visitor or decoy takes about 3.6s. Arrests and decoy checks use no ammo. Moving, looking away or releasing E interrupts the inspection<br>Hold <kbd>R</kbd> to look back · <kbd>F</kbd> for the flashlight at night.</p><p><strong>VISITOR</strong><br><kbd>Shift</kbd> Sprint · Stop moving for 0.6s to settle automatically; looking remains free.  Your facing locks, while your body and shadow remain visible<br>Near a wall or exhibit, a translucent pose preview appears; <kbd>F</kbd> blends into that position. Press a movement key to leave. If already holding movement when freezing, release and press again<br>Hold <kbd>Space</kbd> to hold breath for up to 15s, with a warning at 3s remaining. Recovery starts 1s after release; empty to full takes 12s. Exhaustion causes an audible gasp and 5s cooldown. Release Space and recover at least 3s of breath before pressing again. Holding breath delays inspection but cannot prevent arrest indefinitely.<br>Left click to attack at night.</p><p>Standing still does not erase your shadow. Watch the sun and move when the detective turns away. Daylight lasts 5 minutes. A missed shot brings sunset forward by 25 seconds. Shot decoys break and leave debris for the round. After sunset, the detective can keep shooting or withdraw; the visitor can ambush or escape through the south door. Either role reaching the south exit ends the round. Backup arrives in 45 seconds; a surviving detective wins at the deadline.</p><details><summary>Rehearsal tools</summary><p><kbd>Tab</kbd> Switch roles · <kbd>F2</kbd> Debug information · <kbd>F3</kbd> Advance 45 seconds<br><kbd>F4</kbd> Sunset · <kbd>F6</kbd> Night · <kbd>F7</kbd> Refill ammo<br><kbd>F8</kbd> Show all hiding spots · <kbd>F9</kbd> Toggle bot.</p></details>`,
+    help: `<p><strong>SHARED CONTROLS</strong><br><kbd>{move}</kbd> Move · Mouse to look · <kbd>Esc</kbd> Release the pointer or open the menu.</p><p><strong>DETECTIVE</strong><br>Left click to shoot · Right click to aim<br>In daylight, stand near a figure, aim and hold <kbd>{still}</kbd>: a breathing visitor is exposed in about 1.2s; a breath-holding visitor or decoy takes about 3.6s. Arrests and decoy checks use no ammo. Moving, looking away or releasing {still} interrupts the inspection<br>Hold <kbd>{lookBack}</kbd> to look back · <kbd>{flashlight}</kbd> for the flashlight at night.</p><p><strong>VISITOR</strong><br><kbd>{sprint}</kbd> Sprint · Stop moving for 0.6s to settle automatically; looking remains free.  Your facing locks, while your body and shadow remain visible<br>Near a wall or exhibit, a translucent pose preview appears; <kbd>{poseKey}</kbd> blends into that position. Press a movement key to leave. If already holding movement when freezing, release and press again<br>Hold <kbd>{breath}</kbd> to hold breath for up to 15s, with a warning at 3s remaining. Recovery starts 1s after release; empty to full takes 12s. Exhaustion causes an audible gasp and 5s cooldown. Release {breath} and recover at least 3s of breath before pressing again. Holding breath delays inspection but cannot prevent arrest indefinitely.<br>Left click to attack at night.</p><p>Standing still does not erase your shadow. Watch the sun and move when the detective turns away. Daylight lasts 5 minutes. A missed shot brings sunset forward by 25 seconds. Shot decoys break and leave debris for the round. After sunset, the detective can keep shooting or withdraw; the visitor can ambush or escape through the south door. Either role reaching the south exit ends the round. Backup arrives in 45 seconds; a surviving detective wins at the deadline.</p><details><summary>Rehearsal tools</summary><p><kbd>Tab</kbd> Switch roles · <kbd>F2</kbd> Debug information · <kbd>F3</kbd> Advance 45 seconds<br><kbd>F4</kbd> Sunset · <kbd>F6</kbd> Night · <kbd>F7</kbd> Refill ammo<br><kbd>F8</kbd> Show all hiding spots · <kbd>F9</kbd> Toggle bot.</p></details>`,
   },
 };
 
 export const language =
   localStorage.getItem("still.language") === "en" ? "en" : "zh";
 
-export const t = (key) => copy[language][key] ?? key;
+const touchLabels = {
+  zh: { move: "摇杆", sprint: "摇杆上推", still: "检查", poseKey: "姿势", breath: "屏息", flashlight: "手电", lookBack: "回头" },
+  en: { move: "JOYSTICK", sprint: "PUSH STICK UP", still: "EXAMINE", poseKey: "POSE", breath: "BREATH", flashlight: "LIGHT", lookBack: "LOOK BACK" },
+};
+const touchHelp = {
+  zh: "<p><strong>触控操作</strong><br>横拿手机进行对局。左侧摇杆移动，向上推远可短跑；松开摇杆后自动站定。右侧空白区域滑动观察。</p><p><strong>警探</strong><br>点击举枪切换瞄准，开火按钮射击；白天靠近目标、站稳瞄准，按住检查。按住回头观察身后，夜间点击手电。</p><p><strong>来客</strong><br>可用位置出现姿势按钮。按住屏息、松开恢复；耗尽后必须松开再按。夜间点击袭击。</p><p>浏览器旋转时会清空触控，请重新按下摇杆或按钮。Ⅱ 打开菜单；联机时计时继续。</p>",
+  en: "<p><strong>TOUCH CONTROLS</strong><br>Hold your phone sideways. Move with the left stick; push farther upward to sprint. Release to settle. Drag the open right area to look.</p><p><strong>DETECTIVE</strong><br>Tap Aim to toggle aiming, Fire to shoot. In daylight, stand near a figure, aim and hold Examine. Hold Look back; tap Light at night.</p><p><strong>VISITOR</strong><br>Pose appears at available positions. Hold Breath, release to recover; release after exhaustion before trying again. Tap Attack at night.</p><p>Rotation releases all controls; touch them again to continue. Ⅱ opens the menu. Online, the clock keeps running.</p>",
+};
+export const t = (key) => {
+  if (touchControls && key === "help") return touchHelp[language];
+  if (touchControls && ["detectiveControls", "killerControls"].includes(key)) return language === "zh" ? "左侧摇杆移动 · 右侧滑动观察" : "LEFT STICK MOVE · DRAG RIGHT TO LOOK";
+  return (copy[language][key] ?? key).replace(/\{(move|forward|backward|left|right|sprint|still|poseKey|breath|flashlight|lookBack)\}/g, (_, action) => {
+    if (touchControls && touchLabels[language][action]) return touchLabels[language][action];
+    return action === "move" ? ["forward", "left", "backward", "right"].map(name => keyLabel(controlBindings[name])).join(" ") : keyLabel(controlBindings[action === "poseKey" ? "pose" : action]);
+  });
+};
 
 export const tf = (key, values) =>
   Object.entries(values).reduce(

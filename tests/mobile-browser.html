@@ -1,0 +1,65 @@
+<!doctype html><meta charset="utf-8"><title>Mobile game regression</title>
+<style>body { font:14px monospace; background:#ddd; } button { padding:12px; } iframe { display:block; border:0; width:390px; height:844px; } pre { white-space:pre-wrap; }</style>
+<button id="run">Run mobile checks</button><button id="portrait">390 × 844</button><button id="landscape">844 × 390</button>
+<pre id="report">Ready. Uses the real game in a resizable iframe; synthetic touch tests include capture stubs.</pre>
+<iframe src="/"></iframe>
+<script type="module">
+const frame = document.querySelector("iframe"), report = document.querySelector("#report");
+const wait = ms => new Promise(r => setTimeout(r, ms));
+const size = async (w,h) => { frame.style.width = w+"px"; frame.style.height = h+"px"; await wait(250); };
+document.querySelector("#portrait").onclick = () => size(390,844);
+document.querySelector("#landscape").onclick = () => size(844,390);
+document.querySelector("#run").onclick = async () => {
+  const results = [];
+  const check = (condition, message) => { if (!condition) throw Error(message); results.push("PASS " + message); report.textContent = results.join("\n"); };
+  try {
+    const win = frame.contentWindow, doc = frame.contentDocument, game = win.still;
+    if (!game) throw Error("Game has not loaded");
+    // Synthetic pointers do not have an OS capture session; stub capture only in this fixture.
+    const targets = doc.querySelectorAll(".touch-stick, .touch-look, [data-touch]");
+    targets.forEach(el => { const ids = new Set(); el.setPointerCapture = id => ids.add(id); el.hasPointerCapture = id => ids.has(id); el.releasePointerCapture = id => ids.delete(id); });
+    const emit = (target, type, id, x, y) => target.dispatchEvent(new win.PointerEvent(type, { bubbles:true, cancelable:true, pointerType:"touch", pointerId:id, clientX:x, clientY:y }));
+    emit(doc.body,"pointerdown",99,5,5); await wait(80);
+    doc.querySelector('[data-role="killer"]').click(); doc.querySelector("#local").click();
+    game.botEnabled = false; game.debug("day"); await wait(250);
+    const root = doc.querySelector("#game-stage"), layer = doc.querySelector("#touch-controls");
+    check(root.clientWidth === 844 && root.clientHeight === 390, "portrait viewport creates landscape stage");
+    check(win.getComputedStyle(root).transform.includes("0, 1, -1, 0"), "portrait stage rotates exactly 90 degrees");
+    check(Math.abs(game.scene.camera.aspect - 844/390) < .001, "WebGL camera uses stage aspect");
+    const point = (x,y) => { const r = root.getBoundingClientRect(); return root.clientWidth > frame.clientWidth ? [r.right-y,r.top+x] : [r.left+x,r.top+y]; };
+    const stick = doc.querySelector(".touch-stick"), look = doc.querySelector(".touch-look"), breath = doc.querySelector('[data-touch="breath"]');
+    game.setPlayer("killer", { x:0,z:0,still:false,yaw:0 }); game.setView(0);
+    emit(stick,"pointerdown",1,...point(90,290)); emit(stick,"pointermove",1,...point(90,240));
+    emit(look,"pointerdown",2,...point(450,160)); emit(look,"pointermove",2,...point(490,160));
+    await wait(250);
+    check(Math.hypot(game.state.players.killer.x, game.state.players.killer.z) > .2, "touch joystick moves the real player");
+    check(game.state.players.killer.yaw < -.05, "rotated look maps horizontal drag correctly while moving");
+    emit(stick,"pointerup",1,...point(90,240)); emit(look,"pointerup",2,...point(490,160));
+    await wait(800); emit(breath,"pointerdown",3,...point(760,340)); await wait(150);
+    check(game.state.players.killer.holding, "touch breath reaches real game input");
+    emit(breath,"pointercancel",3,...point(760,340)); await wait(100);
+    check(!game.state.players.killer.holding, "pointer cancellation releases breath");
+    emit(stick,"pointerdown",4,...point(90,290)); emit(stick,"pointermove",4,...point(90,240));
+    await size(844,390);
+    check(win.getComputedStyle(root).transform === "matrix(1, 0, 0, 1, 0, 0)", "browser landscape removes extra rotation");
+    const p = {...game.state.players.killer}; await wait(150);
+    check(Math.hypot(p.x-game.state.players.killer.x,p.z-game.state.players.killer.z)<.01,"resize releases active joystick");
+    doc.querySelector("#pause-button").click(); await wait(80);
+    check(layer.hidden && !doc.querySelector("#pause").hidden,"pause hides touch controls");
+    doc.querySelector("#pause-settings").click(); await wait(80);
+    check(doc.querySelector("#settings").open,"settings stays accessible outside game transform");
+    doc.querySelector("#settings-close").click(); doc.querySelector("#return-menu").click(); await size(390,844);
+    check(root.clientWidth === 390 && root.clientHeight === 844,"returning to menu restores native portrait layout");
+    doc.querySelector('[data-role="detective"]').click(); doc.querySelector("#local").click(); game.botEnabled=false; game.debug("day"); await wait(150);
+    const aim = doc.querySelector('[data-touch="aim"]'), fire = doc.querySelector('[data-touch="shoot"]');
+    emit(aim,"pointerdown",7,...point(740,280)); emit(aim,"pointerup",7,...point(740,280));
+    check(aim.classList.contains("pressed"),"detective aim toggles");
+    game.setView(Math.PI / 2);
+    const ammo = game.state.ammo; emit(fire,"pointerdown",8,...point(800,330)); emit(fire,"pointerup",8,...point(800,330));
+    check(game.state.ammo === ammo-1,"touch fire consumes exactly one round");
+    check(!doc.querySelector('[data-touch="inspect"]').hidden && breath.hidden,"role-specific buttons switch");
+    await size(844,390);
+    report.textContent = results.join("\n") + "\nALL PASSED";
+  } catch (error) { report.textContent = results.join("\n") + "\nFAIL " + error.stack; }
+};
+</script>

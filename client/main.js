@@ -2,7 +2,7 @@ import { resultNarrative } from "./narrative.js";
 import { MovementPrediction } from "./prediction.js";
 import { Gallery } from "./scene.js";
 import { Game } from "../shared/game.js";
-import { CONFIG as C, BINDINGS } from "../shared/config.js";
+import { CONFIG as C } from "../shared/config.js";
 import { spots, rooms } from "../shared/world.js";
 import { sunAt } from "../shared/sun.js";
 import { AudioDirector } from "./audio-director.js";
@@ -10,7 +10,9 @@ import { RehearsalBot } from "./bot.js";
 import { Connection } from "./network.js";
 import { SnapshotBuffer } from "./interpolation.js";
 import { DEFAULT_SETTINGS, mountSettings } from "./settings.js";
-import { applyLanguage, language, t, tf, translateError } from "./i18n.js";
+import { applyLanguage, language, t, tf, translateError, setControlBindings, setTouchControls } from "./i18n.js";
+import { mountMobile } from "./mobile.js";
+import { mountBindings } from "./bindings.js";
 applyLanguage();
 const $ = (id) => document.getElementById(id),
   canvas = $("game");
@@ -59,14 +61,37 @@ let game = new Game({ debug: true }),
   dragLook = false;
 let hudClock = 0;
 let connectionBlocked = false;
-let bindings = { ...BINDINGS };
-try {
-  bindings = {
-    ...bindings,
-    ...JSON.parse(localStorage.getItem("still.bindings") || "{}"),
-  };
-} catch {}
-delete bindings.mark;
+let bindings;
+const bindingSettings = mountBindings(settingsDialog, { language, storage: localStorage, onChange(next) {
+  bindings = next;
+  keys.clear();
+  setControlBindings(next);
+  document.querySelectorAll(".help-copy").forEach(el => { el.innerHTML = t("help"); });
+} });
+settingsDialog.addEventListener("toggle", () => { keys.clear(); aim = false; dragLook = false; });
+const mobile = mountMobile({ language,
+  onResize: () => gallery.resize(),
+  onReset: () => { keys.clear(); aim = false; dragLook = false; },
+  onAim: value => { aim = value; },
+  onLook: (dx, dy) => {
+    view.yaw -= dx * .004 * settings.sensitivity;
+    view.pitch = Math.max(-1.15, Math.min(1.15, view.pitch - dy * .003 * settings.sensitivity * (settings.invertY ? -1 : 1)));
+  },
+  onAction: action,
+  onWake: () => { if (role === "killer" && state.players.killer.still) action("unstill"); },
+});
+settingsDialog.addEventListener("toggle", () => mobile.reset());
+let mobileCopy = false;
+function updateMobile() {
+  setTouchControls(mobile.enabled);
+  if (mobile.enabled && !mobileCopy) {
+    mobileCopy = true;
+    document.querySelectorAll(".help-copy").forEach(el => { el.innerHTML = t("help"); });
+    document.querySelector(".menu-note").textContent = language === "zh" ? "支持触控 · 对局请横拿手机 · 建议戴上耳机" : "TOUCH SUPPORTED · HOLD SIDEWAYS TO PLAY · HEADPHONES RECOMMENDED";
+  }
+  mobile.update({ started, paused, modal: settingsDialog.open || $("help").open,
+    role, state, poseAvailable: mobile.enabled && started && !paused && ["PREPARATION", "DAY"].includes(state.phase) && role === "killer" && (!state.players.killer.still || state.players.killer.spotId === null) && !!game.nearestSpot() });
+}
 const connection = new Connection(
   (s) => {
     snapshots.push(s, performance.now());
@@ -199,6 +224,7 @@ $("join-form").onsubmit = (e) => {
   connect("join");
 };
 function lock() {
+  if (mobile.enabled) return;
   if (document.pointerLockElement !== canvas)
     canvas
       .requestPointerLock()
@@ -224,12 +250,15 @@ function begin(nextMode, nextRole, capturePointer = true) {
   $("pause").hidden = true;
   $("results").hidden = true;
   $("resume").disabled = false;
+  updateMobile();
   if (capturePointer) { sound.ensureAudioStarted(); lock(); }
 }
 function pause(value) {
   if (!started) return;
   if (!value && connectionBlocked) return;
   paused = value;
+  mobile.reset();
+  updateMobile();
   $("pause").hidden = !value;
   keys.clear();
   aim = false;
@@ -245,6 +274,8 @@ function menu() {
   connection.close();
   mode = "menu";
   started = false;
+  mobile.reset();
+  updateMobile();
   waiting = false;
   connectionBlocked = false;
   $("network-cancel").hidden = true;
@@ -284,7 +315,7 @@ canvas.addEventListener("click", () => {
 });
 document.addEventListener("pointerlockchange", () => {
   if (
-    !document.pointerLockElement &&
+    !mobile.enabled && !document.pointerLockElement &&
     !(mode === 'local' && debug) &&
     started &&
     state.phase !== "GAME_OVER" &&
@@ -302,17 +333,18 @@ document.addEventListener("mousemove", (e) => {
 });
 const backYaw = () =>
   view.yaw +
-  (role === "detective" && keys.has(bindings.lookBack) ? Math.PI : 0);
+  (role === "detective" && (keys.has(bindings.lookBack) || mobile.controls.lookBack) ? Math.PI : 0);
 function input() {
+  if (settingsDialog.open || $("help").open || document.hidden) return { yaw: backYaw(), pitch: view.pitch };
   return {
     forward:
-      Number(keys.has(bindings.forward)) - Number(keys.has(bindings.backward)),
-    strafe: Number(keys.has(bindings.right)) - Number(keys.has(bindings.left)),
+      Math.max(-1, Math.min(1, Number(keys.has(bindings.forward)) - Number(keys.has(bindings.backward)) + mobile.controls.forward)),
+    strafe: Math.max(-1, Math.min(1, Number(keys.has(bindings.right)) - Number(keys.has(bindings.left)) + mobile.controls.strafe)),
     yaw: backYaw(),
     pitch: view.pitch,
-    sprint: keys.has(bindings.sprint) || keys.has("ShiftRight"),
-    breath: keys.has(bindings.breath),
-    inspect: role === "detective" && keys.has(bindings.still),
+    sprint: keys.has(bindings.sprint) || mobile.controls.sprint,
+    breath: keys.has(bindings.breath) || mobile.controls.breath,
+    inspect: role === "detective" && (keys.has(bindings.still) || mobile.controls.inspect),
   };
 }
 function action(a) {
@@ -334,7 +366,7 @@ document.addEventListener("keydown", (e) => {
   if (settingsDialog.open || e.target.matches("input, select, textarea")) return;
   if (!started || e.target.matches("input")) return;
   if (
-    ["Tab", "Space", "F2", "F3", "F4", "F6", "F7", "F8", "F9"].includes(e.code)
+    [...Object.values(bindings), "Tab", "F2", "F3", "F4", "F6", "F7", "F8", "F9", "F10"].includes(e.code)
   )
     e.preventDefault();
   if (e.repeat) return;
@@ -404,7 +436,7 @@ window.addEventListener("blur", () => {
 });
 document.addEventListener("contextmenu", (e) => e.preventDefault());
 document.addEventListener("mousedown", (e) => {
-  if (!started || paused || e.target !== canvas) return;
+  if (mobile.enabled || !started || paused || e.target !== canvas) return;
   if (e.button === 1) {
     e.preventDefault();
     dragLook = true;
@@ -564,9 +596,10 @@ function hud(now) {
   }
 }
 function frame(now) {
+  updateMobile();
   const dt = Math.min((now - lastTime) / 1000, 0.06);
   lastTime = now;
-  if (started && !paused) {
+  if (started && !paused && !settingsDialog.open) {
     view.yaw +=
       (Number(keys.has("ArrowLeft")) - Number(keys.has("ArrowRight"))) *
       dt *
@@ -668,12 +701,7 @@ window.still = {
   audio: sound,
   audioDebug,
   action,
-  bind(action, code) {
-    if (action in BINDINGS) {
-      bindings[action] = code;
-      localStorage.setItem("still.bindings", JSON.stringify(bindings));
-    }
-  },
+  bind(action, code) { return bindingSettings.bind(action, code); },
 };
 connection.resumeSaved();
 
