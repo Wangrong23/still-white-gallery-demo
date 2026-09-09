@@ -37,7 +37,9 @@ function softenShadows(material, floor = shadowFloor) {
 // turns only the shaded part of the body into a translucent rim.
 function ghostInShadow(material, mask) {
   material.transparent = true;
-  material.depthWrite = false;
+  // Lit fragments are fully opaque and must occlude later transparent draws
+  // (floor lettering, pose previews, smoke). Alpha alone does not do that.
+  material.depthWrite = true;
   material.onBeforeCompile = shader => {
     Object.assign(shader.uniforms,mask.uniforms);
     shader.uniforms.shadowFloor = shadowFloor;

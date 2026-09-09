@@ -117,7 +117,7 @@ export function mountMobile({ language, onResize, onReset, onLook, onAction, onA
   resize();
   return {
     get enabled() { return enabled; }, controls, reset,
-    update({ started, paused, modal, role, state, poseAvailable }) {
+    update({ started, paused, modal, role, state, poseLabel }) {
       const nextUsable = enabled && started && !paused && !modal && state.phase !== "GAME_OVER";
       if (active !== started) { active = started; resize(); }
       if (enabled && (usable !== nextUsable || currentRole !== role || phase !== state.phase)) reset();
@@ -125,7 +125,11 @@ export function mountMobile({ language, onResize, onReset, onLook, onAction, onA
       const detective = role === "detective", night = phase === "NIGHT", day = ["PREPARATION", "DAY"].includes(phase);
       const visible = { lookBack: detective, flashlight: detective && night, aim: detective,
         inspect: detective && phase === "DAY", shoot: detective && (phase === "DAY" || night),
-        pose: !detective && day && poseAvailable, breath: !detective && day, attack: !detective && night };
+        pose: !detective && day && !!poseLabel, breath: !detective && day, attack: !detective && night };
+      if (poseLabel && buttons.pose.textContent !== poseLabel) {
+        buttons.pose.textContent = poseLabel;
+        buttons.pose.setAttribute("aria-label", poseLabel);
+      }
       for (const [name, button] of Object.entries(buttons)) if (button.hidden !== !visible[name]) button.hidden = !visible[name];
     },
   };

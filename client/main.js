@@ -89,8 +89,10 @@ function updateMobile() {
     document.querySelectorAll(".help-copy").forEach(el => { el.innerHTML = t("help"); });
     document.querySelector(".menu-note").textContent = language === "zh" ? "支持触控 · 对局请横拿手机 · 建议戴上耳机" : "TOUCH SUPPORTED · HOLD SIDEWAYS TO PLAY · HEADPHONES RECOMMENDED";
   }
+  const poseTarget = mobile.enabled && started && !paused && ["PREPARATION", "DAY"].includes(state.phase)
+    && role === "killer" && (!state.players.killer.still || state.players.killer.spotId === null) ? game.nearestSpot() : null;
   mobile.update({ started, paused, modal: settingsDialog.open || $("help").open,
-    role, state, poseAvailable: mobile.enabled && started && !paused && ["PREPARATION", "DAY"].includes(state.phase) && role === "killer" && (!state.players.killer.still || state.players.killer.spotId === null) && !!game.nearestSpot() });
+    role, state, poseLabel: poseTarget ? t(`pose_${poseTarget.pose}`) : null });
 }
 const connection = new Connection(
   (s) => {

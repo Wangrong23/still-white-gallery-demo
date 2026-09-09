@@ -16,7 +16,16 @@ export class ConcealmentMask {
       if (!source.isMesh || !source.castShadow) return;
       for(let p=source;p && p!==world;p=p.parent)
         if(p.userData.parts) return;
-      const mesh = new T.Mesh(source.geometry,depth);
+      // Instanced roof strips use a unit box plus per-instance transforms.
+      // Treating them as a Mesh puts a phantom shadow-casting cube at the
+      // world origin and drops every real strip from the concealment map.
+      const mesh = source.isInstancedMesh
+        ? new T.InstancedMesh(source.geometry,depth,source.count)
+        : new T.Mesh(source.geometry,depth);
+      if (source.isInstancedMesh) {
+        mesh.instanceMatrix = source.instanceMatrix;
+        mesh.frustumCulled = false;
+      }
       mesh.matrixAutoUpdate=false;this.scene.add(mesh);
       this.sources.push({source,mesh});
     });
@@ -33,6 +42,10 @@ export class ConcealmentMask {
     this.world.updateWorldMatrix(true,true);
     for(const {source,mesh} of this.sources) {
       mesh.matrix.copy(source.matrixWorld);
+      if (source.isInstancedMesh) {
+        mesh.count = source.count;
+        mesh.instanceMatrix = source.instanceMatrix;
+      }
       mesh.visible=true;
       for(let p=source;p;p=p.parent) if(!p.visible) mesh.visible=false;
     }
